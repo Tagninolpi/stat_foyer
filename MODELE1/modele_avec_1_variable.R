@@ -118,7 +118,7 @@ hist(
 ## Probabilites d'infection a posteriori
 
 # Personnes non protegees
-p0_non_vaccinated <- plogis(post0[, "a"])
+p0_non_vaccinated <- plogis(post0[, "a"]) # transforme le logit en proba
 mean(p0_non_vaccinated)
 quantile(p0_non_vaccinated, c(0.025, 0.5, 0.975))
 
@@ -146,11 +146,15 @@ hist(
   col = "lightblue"
 )
 
-## Comparaison observe vs predit
+
+## Comparaison obs vs predit
 
 # Probabilites observees
 
-observed0 <- aggregate(
+# grouper les ind selon leur status vaccin 
+# et calculer la proportion d'infectes dans chaque groupe
+
+observed0 <- aggregate( 
   infected ~ vaccinated,
   data = df,
   FUN = mean
@@ -178,7 +182,8 @@ profiles0 <- data.frame(
 )
 
 
-# Comparaison
+# Comparaison: on va merge selon leur statut de vaccination
+
 comparison0 <- merge(
   observed0,
   profiles0,
@@ -190,11 +195,12 @@ comparison0
 
 ## Graphique observe vs predit
 
+# beside pour afficher les barres d'un même groupe côte à côte
 barplot(
   rbind(comparison0$observed_p, comparison0$mean_p),
   beside = TRUE,
   names.arg = c("Non proteges", "Proteges"),
-  col = c("steelblue", "orange"),
+  col = c("blue", "orange"),
   ylim = c(0, 1),
   ylab = "Probabilite d'infection",
   main = "M0 - Observe vs predit"
@@ -203,8 +209,9 @@ barplot(
 legend(
   "topright",
   legend = c("Observe", "Predit"),
-  fill = c("steelblue", "orange")
+  fill = c("blue", "orange")
 )
+
 # On observe que les probabilites predites sont tres proches
 # des probabilites obs pour les deux groupes
 # Les personnes protegees ont une proba d'infection
@@ -215,18 +222,39 @@ legend(
 
 
 
+## Verification du modele par simulation
 
+observed <- sum(df$infected)
+simulated0 <- numeric(1000)
 
+for (j in 1:1000) {
+  
+  a <- post0[j, "a"]
+  b <- post0[j, "b"]
+  
+  # Proba des 902 individus
+  p <- plogis(a + b * df$vaccinated)
+  
+  # Simuler les infections pour chaque p
+  infected_sim <- rbinom(N, size = 1, prob = p)
+  
+  # Nombre total d'infectes
+  simulated0[j] <- sum(infected_sim)
+}
 
+hist(
+  simulated0,
+  breaks = 30,
+  main = "M0 - PPC",
+  xlab = "Nombre d'infectes simules",
+  col = "lightblue"
+)
 
+abline(v = observed, col = "red", lwd = 2)
 
+# La plupart des simulations donnent environ 460 à 510 infectes!!
 
-
-
-
-
-
-
+# Faut refaire le meme travail sur les autres modeles...
 
 ################################
 ##### Modele 1, taille du foyer:
