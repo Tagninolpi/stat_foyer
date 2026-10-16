@@ -175,6 +175,22 @@ mean(echantillons[, "c"] > 0) # Estimer la probabilité a posteriori que c soit 
 
 
 
+
+### CALCUL DU DIC ###
+
+load.module("dic")
+
+dic_M2 <- dic.samples(
+  modele_jags,
+  n.iter = 10000,
+  type = "pD"
+)
+
+sum(dic_M2$deviance) + sum(dic_M2$penalty)
+
+
+
+
 ### TEST AVEC PRIOR PLUS LARGE ###
 
 modele_large <- "model {
