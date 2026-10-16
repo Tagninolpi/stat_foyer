@@ -2,14 +2,16 @@
 
 Le fichier est importé avec `read.table()`, puis les dix colonnes sont nommées. La variable `infecte` regroupe les statuts d’infection en deux catégories : **0 = non infecté ; 1 = infecté**, avec ou sans symptômes.
 
-Nous conservons uniquement les contacts (`index_contact == 0`) et excluons les personnes ayant une infection antérieure (`statut_vaccinal == -1`). L’objectif est d’étudier l’infection chez les contacts selon leur vaccination et la taille de leur foyer.
+Nous conservons uniquement les contacts (`index_contact == 0`) et excluons les personnes ayant une infection antérieure (`statut_vaccinal == -1`). 
+
+L’objectif est d’étudier l’infection chez les contacts selon leur vaccination et la taille de leur foyer.
 
 Parmi les 687 contacts, 20 sont exclus pour infection antérieure. L’analyse porte donc sur **667 contacts, dont 269 infectés**.
 
 | Statut vaccinal | Non infectés | Infectés | Total | Proportion infectée |
 |---|---:|---:|---:|---:|
-| Non-vaccinés selon la définition de l’étude | 294 | 248 | 542 | 45,8 % |
-| Vaccinés selon la définition de l’étude | 104 | 21 | 125 | 16,8 % |
+| Non-vaccinés | 294 | 248 | 542 | 45,8 % |
+| Vaccinés | 104 | 21 | 125 | 16,8 % |
 
 La proportion d’infectés est plus faible chez les vaccinés. Cette comparaison est descriptive : elle ne tient pas encore compte de la taille du foyer.
 
@@ -32,8 +34,6 @@ Le modèle suppose les infections indépendantes conditionnellement aux coeffici
 Les trois coefficients reçoivent un prior `dnorm(0, 0.16)`. Dans JAGS, le deuxième argument est la précision : ces priors ont donc une moyenne de **0** et un écart-type de **2,5**.
 
 Les bibliothèques `rjags` et `coda` sont chargées pour réaliser l’estimation et examiner les chaînes MCMC. Trois jeux de valeurs initiales différents sont préparés pour les trois chaînes.
-
-À ce stade, le modèle est défini, mais aucune estimation n’a encore été réalisée. Les valeurs initiales ne sont pas des résultats.
 
 ## 3. Création des données simulées
 
@@ -97,7 +97,7 @@ Les chaînes se superposent sans dérive visible. Les diagnostics de Gelman-Rubi
 
 - **Vaccination :** à taille de foyer identique, elle est associée à une probabilité d’infection plus faible. Tous les tirages conservés de `b` sont négatifs : la probabilité a posteriori estimée de `b < 0` est proche de 1, sans signifier une certitude absolue.
 - **Taille du foyer :** à statut vaccinal identique, une taille plus élevée est associée à une probabilité d’infection plus grande. La probabilité a posteriori estimée de `c > 0` est de **98,7 %**.
-- **Constante :** `a` correspond au logit de la probabilité pour un contact non vacciné dans un foyer de taille zéro ; elle n’a donc pas d’interprétation pratique directe.
+- **Constante :** `a` correspond au logit de la probabilité pour un contact non vacciné dans un foyer de taille zéro.
 
 Ces coefficients sont exprimés sur l’échelle logit, et non en pourcentages. Les associations sont estimées sous les hypothèses du modèle, sans ajustement sur l’âge ou l’isolement, et ne suffisent pas à établir un effet causal. La capacité du modèle à reproduire les observations sera examinée par les vérifications prédictives.
 
