@@ -201,7 +201,12 @@ comparison_iso <- merge(
 )
 
 comparison_iso
-
+"""
+Les probabilités prédites par le modèle (63,3 % chez les non isolés, 26,3 % chez les isolés) 
+coïncident avec les proportions observées (63,5 % et 26,3 %) et celles-ci sont comprises dans
+les intervalles crédibles à 95 %. Ce résultat est attendu pour un modèle à une seule variable
+binaire et ne suffit pas à valider le modèle.
+"""
 
 ## Graphique observe vs predit
 
@@ -257,4 +262,10 @@ hist(
 )
 
 abline(v = observed_total, col = "red", lwd = 2)
+
+"""
+Le nombre total d’infectés observé (269) se situe au centre de la distribution prédictive a posteriori (environ 235 à 305). 
+Ce résultat est attendu pour un modèle avec constante et ne suffit pas à valider le modèle : des vérifications au niveau des 
+foyers sont nécessaires.
+"""
 

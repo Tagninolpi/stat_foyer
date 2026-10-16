@@ -1,90 +1,36 @@
-############################################################
-# MODELE COMPLET : vaccination + taille du foyer + isolement
-############################################################
-# Question : l'isolement apporte-t-il de l'information EN PLUS de la
-# vaccination et de la taille du foyer ?
-# Pour y repondre on regarde (1) si l'effet de l'isolement reste fort une fois
-# les deux autres variables prises en compte, (2) si le modele s'ajuste mieux
-# (DIC), (3) si les predictions collent aux donnees (PPC).
-
 library(coda)
 library(rjags)
-load.module("dic")  # necessaire pour calculer le DIC avec dic.samples()
+load.module("dic")
 
-
-################################
-##### 1. Preparation des donnees
-################################
-
+# 1. preparation des données
 df <- read.table("DATA/2021_05_14_full_database_2doses.txt")
 
 colnames(df) <- c(
-  "individual_id",
-  "house_id",
-  "household_size",
-  "date_symptom",
-  "infection_status",
-  "vaccination_status",
-  "end_follow_up",
-  "age",
-  "index_cases",
-  "isolation_status"
+  "individual_id", "house_id", "household_size", "date_symptom",
+  "infection_status", "vaccination_status", "end_follow_up",
+  "age", "index_cases", "isolation_status"
 )
 
-# Variable a expliquer : infecte (1) ou non (0).
-# dbern (loi de Bernoulli) n'accepte que 0 ou 1, donc on regroupe tous les
-# statuts d'infection non nuls en 1.
+# infecté = 1, non infecté = 0 (dbern accepte que 0 et 1) (1,2,3 = 1) (0=0)
 df$infected <- ifelse(df$infection_status == 0, 0, 1)
 
-# On ne garde que les contacts (index_cases == 0), car les cas index sont
-# infectes par definition et ont presque tous isolation_status = 0 : les garder
-# ferait croire que "ne pas s'isoler" cause l'infection.
-# On retire aussi les contacts deja infectes l'annee precedente
-# (vaccination_status == -1), comme dans l'article.
+# comme dans l'étude on étudie que les cas contact (pas de biais)
+# comme dans l'étude on retire aussi les 20 individus déja infectés (immunité non liée au vaccin) ???
 df <- subset(df, index_cases == 0 & vaccination_status != -1)
-dim(df)   # 667 lignes attendues
+dim(df)
 
-# Vaccination : 0 = non vaccine, 1 = vaccine (apres le filtre, il ne reste que 0 et 1)
-df$vaccinated <- df$vaccination_status
+df$vaccinated <- df$vaccination_status # (on as enlevé -1)
 
-# Isolement : 0 = aucun ; 1 = partiel ; 2 = complet
-# On regroupe 1 et 2 (isole) et on laisse 0 seul (non isole), comme dans M_iso.
-df$isolated <- ifelse(df$isolation_status == 0, 0, 1)
+# comme dans l'étude, isolement partiel et complet sont regroupé
+df$isolated   <- ifelse(df$isolation_status == 0, 0, 1)
 
-# Taille du foyer CENTREE : on retire la moyenne.
-# Pourquoi : (1) a devient la proba d'un non vaccine, non isole, dans un foyer
-# de taille moyenne (au lieu d'un foyer de taille 0, qui n'existe pas),
-# (2) a et b_size sont moins correles, donc les chaines melangent mieux.
-# Les coefficients b_vacc, b_size et b_iso ne changent pas : seul a change de sens.
-df$size_c <- df$household_size - mean(df$household_size)
-mean(df$household_size)
+# on transform la taille du foyer en centrant sur 0 pour que dans a taille= 0 correspond as
+# un foyer de taille moyenne et pas un foyer avec 0 personnes
+df$size_c     <- df$household_size - mean(df$household_size)
 
 N <- nrow(df)
-N
 
-# Verifications avant de modeliser
-table(df$vaccination_status)               # uniquement 0 et 1
-table(df$isolation_status, df$isolated)    # regroupement correct
-table(df$vaccinated, df$isolated)
-# -> si presque tous les vaccines sont isoles (ou l'inverse), les effets de la
-#    vaccination et de l'isolement seront difficiles a separer (grande incertitude)
-
-aggregate(infected ~ vaccinated + isolated, data = df, FUN = mean)
-# -> proportions observees d'infectes dans chaque groupe : on les compare plus
-#    tard aux predictions du modele
-
-
-################################
-##### 2. Le modele
-################################
-
-# Regression logistique bayesienne :
-# logit(p) = a + b_vacc * vaccine + b_size * taille_centree + b_iso * isole
-# - le logit garantit une proba entre 0 et 1
-# - exp(b_vacc), exp(b_size), exp(b_iso) sont des odds ratios, AJUSTES : l'effet
-#   de chaque variable quand les deux autres restent identiques
-# - prior dnorm(0, 0.16) : precision 0.16, donc ecart-type 2.5 (meme prior que
-#   les autres modeles) : large, centre sur 0, donc on ne presuppose aucun effet
+# 2. Le modele (3 variables)
 
 model_M3 <- "model {
   a ~ dnorm(0, 0.16)
@@ -106,38 +52,20 @@ data_M3 <- list(
   isolated = df$isolated
 )
 
-
-################################
-##### 3. Estimation par MCMC
-################################
-
-# 3 chaines qui partent de points eloignes : si elles finissent par explorer la
-# meme zone, c'est un signe de convergence (c'est ce que mesure gelman.diag).
-# .RNG.seed differente par chaine : resultats reproductibles.
-# La taille du foyer a des valeurs de depart plus petites (+/- 1) car son
-# coefficient s'applique a des ecarts jusqu'a plusieurs personnes.
+# on fixe les poitns de départ eloigné possible
+# une convergence avec des départs aléatoire proche peux etre un faux positif 
 init_M3 <- list(
-  list(a = -2, b_vacc = -2, b_size = -1, b_iso = -2,
-       .RNG.name = "base::Mersenne-Twister", .RNG.seed = 1),
-  list(a =  0, b_vacc =  0, b_size =  0, b_iso =  0,
-       .RNG.name = "base::Mersenne-Twister", .RNG.seed = 2),
-  list(a =  2, b_vacc =  2, b_size =  1, b_iso =  2,
-       .RNG.name = "base::Mersenne-Twister", .RNG.seed = 3)
+  list(a = -2, b_vacc = -2, b_size = -1, b_iso = -2,),
+  list(a =  0, b_vacc =  0, b_size =  0, b_iso =  0,),
+  list(a =  2, b_vacc =  2, b_size =  1, b_iso =  2,)
 )
 
-# Creation du sampler
 model_jags_M3 <- jags.model(
-  textConnection(model_M3),
-  data = data_M3,
-  inits = init_M3,
-  n.chains = 3
+  textConnection(model_M3), data = data_M3, inits = init_M3, n.chains = 3
 )
 
-# burn-in : les premieres iterations ne sont pas conservees, le temps que les
-# chaines quittent leur point de depart et rejoignent la zone stable
-update(model_jags_M3, 2000)
+update(model_jags_M3, 2000)   # burn-in
 
-# echantillon a posteriori : 10000 tirages conserves par chaine
 samples_M3 <- coda.samples(
   model_jags_M3,
   variable.names = c("a", "b_vacc", "b_size", "b_iso"),
@@ -145,252 +73,177 @@ samples_M3 <- coda.samples(
 )
 
 
-################################
-##### 4. Convergence
-################################
-# A regarder AVANT d'interpreter quoi que ce soit : des chaines non convergees
-# donnent des estimations sans valeur.
-
-summary(samples_M3)
+# 3. Convergence et autocorrelation
+for (par_name in c("a", "b_vacc", "b_size", "b_iso")) {
+  png(paste0("trace_", par_name, ".png"), width = 1000, height = 500)
+  plot(samples_M3[, par_name], main = par_name)
+  dev.off()
+}
 
 gelman.diag(samples_M3)
-# Point est. proche de 1 (< 1.05) = les chaines ont converge vers la meme distribution
 
+for (par_name in c("a", "b_vacc", "b_size", "b_iso")) {
+  
+  # Gelman-Rubin : un fichier par parametre
+  png(paste0("gelman_", par_name, ".png"), width = 800, height = 500)
+  gelman.plot(samples_M3[, par_name], main = par_name)
+  dev.off()
+  
+  # Autocorrelation (chaine 1) : un fichier par parametre
+  png(paste0("autocorr_", par_name, ".png"), width = 800, height = 500)
+  autocorr.plot(samples_M3[, par_name][[1]], main = par_name)
+  dev.off()
+}
 effectiveSize(samples_M3)
-# nombre de tirages "independants" (les tirages MCMC sont correles) : viser
-# plusieurs centaines au minimum
+"""
+gelman diag donne 1 et sur les plots retombe vers 1 au bout de ~4000 ittéretions =>  bonne convergence
+les traces des 4 paramètres se superposes => bonne convergence
 
-plot(samples_M3)
-# traces superposees, sans derive = bon signe
+tailles effectives : 
+        a     b_iso    b_size    b_vacc 
+ 4743.345  4935.909 19267.365 13367.161 
 
-autocorr.plot(samples_M3)
-# l'autocorrelation doit retomber rapidement vers 0
-# (appuyer sur Entree entre deux graphiques)
+size et vacc retombent à 0 en 2 à 4 pas (pas autocorélation)
+iso et a mettent plus de temps (8 à 10 pas => quand meme absence d'autocorélation)
+ce qui s'explique par taille effective plus faible
+"""
 
+#correlation entre parametres:
+round(crosscorr(samples_M3), 2)
+# corrélations a posteriori proche de 0 (faible corrélation entre les paramètres)
+# sauf entre a et iso -0.75  (normal (on pas un nombre de personnes similaire dans chaque groupe
+#cette différence crée une corrélation entre a et iso), pas de corrélation entre variables)
+"""       a  b _iso  b_size b_vacc
+a       1.00 -0.75  -0.03  -0.32
+b_iso  -0.75  1.00  -0.02   0.12
+b_size -0.03 -0.02   1.00   0.09
+b_vacc -0.32  0.12   0.09   1.00
+"""
 
-################################
-##### 5. Distribution a posteriori des parametres
-################################
+# 4. Apport des donnees : posterior vs prior
 
 post_M3 <- as.matrix(samples_M3)
 
-for (par in c("a", "b_vacc", "b_size", "b_iso")) {
-  hist(
-    post_M3[, par],
-    breaks = 50,
-    main = paste("M3 - Posterior de", par),
-    xlab = par,
-    col = "lightblue"
-  )
+for (par_name in c("a", "b_vacc", "b_size", "b_iso")) {
+  png(paste0("prior_posterior_", par_name, ".png"), width = 1000, height = 600, res = 120)
+  hist(post_M3[, par_name], breaks = 50, prob = TRUE, xlim = c(-5, 5),
+       main = paste("Posterior de", par_name), xlab = par_name,
+       col = "lightblue", border = "white")
+  curve(dnorm(x, 0, 2.5), add = TRUE, lwd = 3, col = "steelblue3")   # prior
+  legend("topright", legend = c("Posterior", "Prior N(0 ; 2.5)"),
+         fill = c("lightblue", NA), border = c("white", NA),
+         lty = c(NA, 1), lwd = c(NA, 3), col = c(NA, "steelblue3"), bty = "n")
+  dev.off()
 }
+# les distributions des postérior (données) sont 9 à 55 fois plus grand que les 
+# priors, et etroite et centré => les estimations proviennent des données 
+# et non pas du prior.
 
-# Correlation entre les parametres a posteriori.
-# Pourquoi : si b_vacc et b_iso sont fortement correles negativement, les donnees
-# n'arrivent pas a separer les deux effets (vaccines et isoles se recouvrent).
-round(cor(post_M3), 2)
+# 5. Effets ajustes
+# sens de l'effet
+mean(post_M3[, "b_vacc"] < 0) # =1 => vaccination réduit risque
+mean(post_M3[, "b_iso"] < 0) # =1 => isolement réduit risque
+mean(post_M3[, "b_size"] > 0) # ~1 => plus grand foyer augmente risque
 
-
-################################
-##### 6. Effets ajustes : l'isolement garde-t-il son effet ?
-################################
-
-# Probabilites a posteriori du sens de chaque effet
-# (b < 0 = reduit le risque ; b_size > 0 = augmente le risque)
-mean(post_M3[, "b_vacc"] < 0)
-mean(post_M3[, "b_iso"] < 0)
-mean(post_M3[, "b_size"] > 0)
-
-# Odds ratios et intervalles credibles a 95 % (lignes : 2.5 %, 50 %, 97.5 %)
-# exp(b_size) = effet d'UNE personne de plus dans le foyer
+# taille de l'effet 
 exp(apply(post_M3[, c("b_vacc", "b_size", "b_iso")], 2, quantile, c(0.025, 0.5, 0.975)))
+# vaccination: odds d’infection sont divisés par environ 4,4 (1 / 0,23= 4,4)
+# isolement: odds d’infection sont divisés par environ 5,14 (1 / 0,19= 5,1)
+# odds d’infection sont augmenté d'environ 9% par personne suplémentaire
+quantile(post_M3[, "b_vacc"], c(0.025, 0.5, 0.975))
+'''2.5%        50%      97.5% 
+-2.0357354 -1.4845661 -0.9718969 
+'''
+quantile(post_M3[, "b_iso"],  c(0.025, 0.5, 0.975))
+'''2.5%       50%     97.5% 
+-1.990271 -1.637842 -1.292367 
+''' 
+# à comparer avec modèles précédents
 
-# COMPARAISON AVEC LE MODELE ISOLEMENT SEUL :
-# dans M_iso, b = -1.58 et OR = 0.21 (0.15 - 0.29), effet BRUT.
-# Si l'OR de b_iso reste proche de 0.21 ici, l'effet de l'isolement tient une fois
-# la vaccination et la taille du foyer prises en compte.
-# S'il se rapproche de 1, une partie de l'effet brut venait des autres variables
-# (confusion).
+# 6. Posterior predictive check
 
-# Chevauchement des intervalles : l'effet de l'isolement est-il different de 0 ?
-quantile(post_M3[, "b_iso"], c(0.025, 0.975))
-
-
-################################
-##### 7. Probabilites d'infection a posteriori par profil
-################################
-
-# On applique plogis a CHAQUE tirage (a, b_vacc, b_iso) : cela conserve toute
-# l'incertitude et la correlation entre les parametres.
-# Taille du foyer fixee a la moyenne (size_c = 0).
-
-profiles_M3 <- expand.grid(vaccinated = c(0, 1), isolated = c(0, 1))
-
-for (k in seq_len(nrow(profiles_M3))) {
-  p_k <- plogis(
-    post_M3[, "a"] +
-      post_M3[, "b_vacc"] * profiles_M3$vaccinated[k] +
-      post_M3[, "b_iso"] * profiles_M3$isolated[k]
-  )
-  profiles_M3$mean_p[k]   <- mean(p_k)
-  profiles_M3$lower_95[k] <- quantile(p_k, 0.025)
-  profiles_M3$upper_95[k] <- quantile(p_k, 0.975)
-}
-
-profiles_M3
-# Les profils "non vaccine + isole" et "vaccine + non isole" sont ceux qui montrent
-# l'effet propre de chaque protection.
-
-
-################################
-##### 8. Observe vs predit par groupe
-################################
-
-# On utilise 2000 tirages choisis au hasard (et non les 2000 premiers, qui
-# viendraient tous de la chaine 1)
 set.seed(123)
-idx <- sample(nrow(post_M3), 2000)
+idx <- sample(nrow(post_M3), 1000)
 
 group <- factor(paste0("vacc=", df$vaccinated, " iso=", df$isolated))
 
-# Pour chaque tirage : proba predite de chaque individu, moyenne dans chaque groupe
-pred_group <- sapply(idx, function(j) {
-  p <- plogis(
-    post_M3[j, "a"] +
-      post_M3[j, "b_vacc"] * df$vaccinated +
-      post_M3[j, "b_size"] * df$size_c +
-      post_M3[j, "b_iso"] * df$isolated
-  )
-  tapply(p, group, mean)
-})
+n_contacts <- tapply(df$infected, df$house_id, length)
+obs_inf    <- tapply(df$infected, df$house_id, sum)
+k_max      <- max(n_contacts)
 
-comparison_M3 <- data.frame(
+obs_total <- sum(df$infected)
+obs_none  <- sum(obs_inf == 0)
+obs_all   <- sum(obs_inf == n_contacts)
+obs_sd    <- sd(obs_inf)
+obs_freq  <- table(factor(obs_inf, levels = 0:k_max))
+
+sim_total <- sim_none <- sim_all <- sim_sd <- numeric(length(idx))
+sim_freq  <- matrix(NA, nrow = length(idx), ncol = k_max + 1)
+sim_group <- matrix(NA, nrow = length(idx), ncol = nlevels(group))
+
+for (k in seq_along(idx)) {
+  j <- idx[k]
+  p <- plogis(post_M3[j, "a"] + post_M3[j, "b_vacc"] * df$vaccinated +
+                post_M3[j, "b_size"] * df$size_c + post_M3[j, "b_iso"] * df$isolated)
+  y_sim   <- rbinom(N, size = 1, prob = p)
+  inf_sim <- tapply(y_sim, df$house_id, sum)
+  
+  sim_total[k]  <- sum(y_sim)
+  sim_none[k]   <- sum(inf_sim == 0)
+  sim_all[k]    <- sum(inf_sim == n_contacts)
+  sim_sd[k]     <- sd(inf_sim)
+  sim_freq[k, ] <- table(factor(inf_sim, levels = 0:k_max))
+  sim_group[k, ] <- tapply(y_sim, group, mean)
+}
+
+comparison_group <- data.frame(
   group = levels(group),
   n = as.vector(table(group)),
   observed_p = as.vector(tapply(df$infected, group, mean)),
-  mean_p = rowMeans(pred_group),
-  lower_95 = apply(pred_group, 1, quantile, 0.025),
-  upper_95 = apply(pred_group, 1, quantile, 0.975)
+  mean_p = colMeans(sim_group),
+  lower_95 = apply(sim_group, 2, quantile, 0.025),
+  upper_95 = apply(sim_group, 2, quantile, 0.975)
 )
-comparison_M3
-# Attention aux groupes avec peu d'individus (colonne n) : l'observe y est tres
-# variable et les comparaisons sont peu informatives.
-
-barplot(
-  rbind(comparison_M3$observed_p, comparison_M3$mean_p),
-  beside = TRUE,
-  names.arg = comparison_M3$group,
-  col = c("blue", "orange"),
-  ylim = c(0, 1),
-  ylab = "Probabilite d'infection",
-  main = "M3 - Observe vs predit",
-  cex.names = 0.8
-)
-
-legend(
-  "topright",
-  legend = c("Observe", "Predit"),
-  fill = c("blue", "orange")
-)
-
-# Les memes donnees servent a estimer et a comparer : un bon accord ici ne suffit
-# pas a valider le modele, d'ou les verifications par simulation ci-dessous.
+comparison_group
+'''
+  group   n observed_p     mean_p   lower_95  upper_95
+1 vacc=0 iso=0 210  0.7047619 0.69315714 0.60952381 0.7761905
+2 vacc=0 iso=1 332  0.3012048 0.30564759 0.24096386 0.3734940
+3 vacc=1 iso=0  42  0.2857143 0.33347619 0.16666667 0.5238095
+4 vacc=1 iso=1  83  0.1084337 0.08972289 0.02409639 0.1686747
+'''
 
 
-################################
-##### 9. Verification par simulation (PPC)
-################################
-
-# Principe : on simule des infections avec le modele et on regarde si les donnees
-# reelles restent dans ce que le modele produit.
-
-idx_ppc <- sample(nrow(post_M3), 1000)
-
-sim_total <- numeric(1000)
-sim_none  <- numeric(1000)   # nombre de foyers sans aucun contact infecte
-sim_all   <- numeric(1000)   # nombre de foyers ou tous les contacts sont infectes
-
-# Observe, par foyer (limite connue du modele : il traite les contacts comme
-# independants alors qu'ils partagent la meme exposition dans le foyer)
-n_contacts <- tapply(df$infected, df$house_id, length)
-obs_inf    <- tapply(df$infected, df$house_id, sum)
-
-observed_total <- sum(df$infected)
-observed_none  <- sum(obs_inf == 0)
-observed_all   <- sum(obs_inf == n_contacts)
-
-for (k in 1:1000) {
-  j <- idx_ppc[k]
-  
-  p <- plogis(
-    post_M3[j, "a"] +
-      post_M3[j, "b_vacc"] * df$vaccinated +
-      post_M3[j, "b_size"] * df$size_c +
-      post_M3[j, "b_iso"] * df$isolated
-  )
-  
-  infected_sim <- rbinom(N, size = 1, prob = p)
-  inf_sim <- tapply(infected_sim, df$house_id, sum)
-  
-  sim_total[k] <- sum(infected_sim)
-  sim_none[k]  <- sum(inf_sim == 0)
-  sim_all[k]   <- sum(inf_sim == n_contacts)
-}
-
-# 9a. Nombre total d'infectes
-hist(
-  sim_total,
-  breaks = 30,
-  main = "M3 - PPC : nombre total d'infectes",
-  xlab = "Nombre d'infectes simules",
-  col = "lightblue"
-)
-abline(v = observed_total, col = "red", lwd = 2)
-
-# 9b. Foyers sans aucun infecte
-hist(
-  sim_none,
-  breaks = 30,
-  main = "M3 - PPC : foyers sans aucun contact infecte",
-  xlab = "Nombre de foyers simules",
-  col = "lightblue"
-)
-abline(v = observed_none, col = "red", lwd = 2)
-
-# 9c. Foyers ou tous les contacts sont infectes
-hist(
-  sim_all,
-  breaks = 30,
-  main = "M3 - PPC : foyers ou tous les contacts sont infectes",
-  xlab = "Nombre de foyers simules",
-  col = "lightblue"
-)
-abline(v = observed_all, col = "red", lwd = 2)
-
-# Resume : observe, moyenne simulee, et proportion de simulations >= observe
-# (valeur proche de 0 ou de 1 = le modele reproduit mal cette caracteristique)
 data.frame(
-  caracteristique = c("infectes (total)", "foyers sans infecte", "foyers tous infectes"),
-  observe = c(observed_total, observed_none, observed_all),
-  moyenne_simulee = c(mean(sim_total), mean(sim_none), mean(sim_all)),
-  prop_sim_sup_ou_egal = c(
-    mean(sim_total >= observed_total),
-    mean(sim_none >= observed_none),
-    mean(sim_all >= observed_all)
-  )
+  caracteristique = c("infectes (total)", "foyers sans infecte",
+                      "foyers tous infectes", "sd infectes par foyer"),
+  observe = c(obs_total, obs_none, obs_all, obs_sd),
+  moyenne_simulee = c(mean(sim_total), mean(sim_none), mean(sim_all), mean(sim_sd)),
+  borne_inf_95 = c(quantile(sim_total, .025), quantile(sim_none, .025),
+                   quantile(sim_all, .025), quantile(sim_sd, .025)),
+  borne_sup_95 = c(quantile(sim_total, .975), quantile(sim_none, .975),
+                   quantile(sim_all, .975), quantile(sim_sd, .975)),
+  p_bayesien = c(mean(sim_total >= obs_total), mean(sim_none >= obs_none),
+                 mean(sim_all >= obs_all), mean(sim_sd >= obs_sd))
 )
+'''
+ caracteristique    observe moyenne_simulee borne_inf_95 borne_sup_95 p_bayesien
+1      infectes (total) 269.000000      268.491000   237.000000   301.000000      0.512
+2   foyers sans infecte  97.000000       71.738000    59.000000    86.000000      0.000
+3  foyers tous infectes  43.000000       27.014000    17.000000    37.000000      0.001
+4 sd infectes par foyer   1.615393        1.379335     1.226613     1.548888      0.004
+'''
 
+# bonne description moyenne du modèle, mais mauvaisse explication de la répartition
+# des infections dans les foyers (le modèle ne prend pas  en compte
+# l'états des autres personnes dans le foyer et autres facteurs (effet de l'age))
 
-################################
-##### 10. DIC (ajustement penalise par la complexite)
-################################
-
-# DIC = deviance moyenne + penalite (nombre de parametres effectifs).
-# Plus il est bas, mieux le modele equilibre ajustement et complexite.
+# 7. DIC
 dic_M3 <- dic.samples(model_jags_M3, n.iter = 10000, type = "pD")
 dic_M3
-sum(dic_M3$deviance) + sum(dic_M3$penalty)
 
-# ATTENTION : le DIC ne se compare qu'entre modeles ajustes sur EXACTEMENT les
-# memes lignes. Les modeles vaccination et taille du foyer doivent donc etre
-# ajustes sur ces 667 contacts (meme filtre subset) pour etre compares a celui-ci.
-# Un ecart d'environ 5 ou plus est generalement considere comme net.
+'''
+Mean deviance:  769.5 
+penalty 3.958 
+Penalized deviance: 773.4 
+'''
