@@ -29,8 +29,11 @@ head(df)
 tail(df)
 
 df$infected <- ifelse(df$infection_status == 0, 0, 1)
-df$vaccinated <- ifelse(df$vaccination_status == 0, 0, 1)
+df <- subset(df, index_cases == 0 & vaccination_status != -1)
+dim(df)
 df
+
+df$vaccinated <- df$vaccination_status
 dim(df)
 names(df)
 
