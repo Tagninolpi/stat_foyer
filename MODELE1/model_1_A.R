@@ -328,3 +328,28 @@ mean(pA_vaccinated)
 mean(p_vaccinated_sensi)
 
 
+### DIC
+
+load.module("dic")
+
+# Modele A
+
+dic_M1_A <- dic.samples(
+  model_jagsA,
+  n.iter = 10000,
+  type = "pD"
+)
+
+sum(dic_M1_A$deviance) + sum(dic_M1_A$penalty)
+
+
+
+dic_M1_A_sensi <- dic.samples(
+  model_jagsA_sensi,
+  n.iter = 10000,
+  type = "pD"
+)
+
+sum(dic_M1_A_sensi$deviance) + sum(dic_M1_A_sensi$penalty)
+
+
