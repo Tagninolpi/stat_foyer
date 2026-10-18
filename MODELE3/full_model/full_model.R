@@ -15,31 +15,28 @@ colnames(df) <- c(
 df$infected <- ifelse(df$infection_status == 0, 0, 1)
 
 # comme dans l'étude on étudie que les cas contact (pas de biais)
-# comme dans l'étude on retire aussi les 20 individus déja infectés (immunité non liée au vaccin) ???
+# comme dans l'étude on retire aussi les 20 individus déja infectés (immunité non liée au vaccin)
 df <- subset(df, index_cases == 0 & vaccination_status != -1)
 dim(df)
 
 df$vaccinated <- df$vaccination_status # (on as enlevé -1)
 
-# comme dans l'étude, isolement partiel et complet sont regroupé
-df$isolated   <- ifelse(df$isolation_status == 0, 0, 1)
-
-# on transform la taille du foyer en centrant sur 0 pour que dans a taille= 0 correspond as
-# un foyer de taille moyenne et pas un foyer avec 0 personnes
-df$size_c     <- df$household_size - mean(df$household_size)
+# comme dans l'étude, on ne regroupe pas les partiel et complet (on met 2 paramètre)
+df$isolated   <- df$isolation_status
 
 N <- nrow(df)
-
+N
 # 2. Le modele (3 variables)
 
 model_M3 <- "model {
   a ~ dnorm(0, 0.16)
   b_vacc ~ dnorm(0, 0.16)
-  b_size ~ dnorm(0, 0.16)
-  b_iso ~ dnorm(0, 0.16)
+  c_size ~ dnorm(0, 0.16)
+  d_iso ~ dnorm(0, 0.16)
+  e_iso ~ dnorm(0, 0.16)
 
   for (i in 1:N) {
-    logit(p[i]) <- a + b_vacc * vaccinated[i] + b_size * size_c[i] + b_iso * isolated[i]
+    logit(p[i]) <- a + b_vacc * vaccinated[i] + c_size * (household_size[i]-1) + d_iso * (isolated[i]==1) + e_iso * (isolated[i]==2)
     infected[i] ~ dbern(p[i])
   }
 }"
@@ -48,16 +45,16 @@ data_M3 <- list(
   N = N,
   infected = df$infected,
   vaccinated = df$vaccinated,
-  size_c = df$size_c,
+  household_size = df$household_size,
   isolated = df$isolated
 )
 
-# on fixe les poitns de départ eloigné possible
+# on fixe les points de départ eloigné possible
 # une convergence avec des départs aléatoire proche peux etre un faux positif 
 init_M3 <- list(
-  list(a = -2, b_vacc = -2, b_size = -1, b_iso = -2,),
-  list(a =  0, b_vacc =  0, b_size =  0, b_iso =  0,),
-  list(a =  2, b_vacc =  2, b_size =  1, b_iso =  2,)
+  list(a = -2, b_vacc = -2, c_size = -1, d_iso = -2, e_iso = 0),
+  list(a =  0, b_vacc =  0, c_size =  0, d_iso =  0, e_iso = 2),
+  list(a =  2, b_vacc =  2, c_size =  1, d_iso =  2, e_iso = -2)
 )
 
 model_jags_M3 <- jags.model(
@@ -68,13 +65,13 @@ update(model_jags_M3, 2000)   # burn-in
 
 samples_M3 <- coda.samples(
   model_jags_M3,
-  variable.names = c("a", "b_vacc", "b_size", "b_iso"),
+  variable.names = c("a", "b_vacc", "c_size", "d_iso", "e_iso"),
   n.iter = 10000
 )
 
 
 # 3. Convergence et autocorrelation
-for (par_name in c("a", "b_vacc", "b_size", "b_iso")) {
+for (par_name in c("a", "b_vacc", "c_size", "d_iso", "e_iso")) {
   png(paste0("trace_", par_name, ".png"), width = 1000, height = 500)
   plot(samples_M3[, par_name], main = par_name)
   dev.off()
@@ -82,7 +79,7 @@ for (par_name in c("a", "b_vacc", "b_size", "b_iso")) {
 
 gelman.diag(samples_M3)
 
-for (par_name in c("a", "b_vacc", "b_size", "b_iso")) {
+for (par_name in c("a", "b_vacc", "c_size", "d_iso", "e_iso")) {
   
   # Gelman-Rubin : un fichier par parametre
   png(paste0("gelman_", par_name, ".png"), width = 800, height = 500)
@@ -100,31 +97,35 @@ gelman diag donne 1 et sur les plots retombe vers 1 au bout de ~4000 ittéretion
 les traces des 4 paramètres se superposes => bonne convergence
 
 tailles effectives : 
-        a     b_iso    b_size    b_vacc 
- 4743.345  4935.909 19267.365 13367.161 
+  a       b_vacc     c_size     d_iso     e_iso 
+1525.888 12036.266  1859.648  5151.273 20251.230 
 
 size et vacc retombent à 0 en 2 à 4 pas (pas autocorélation)
 iso et a mettent plus de temps (8 à 10 pas => quand meme absence d'autocorélation)
 ce qui s'explique par taille effective plus faible
 """
+summary(samples_M3)
+
 
 #correlation entre parametres:
 round(crosscorr(samples_M3), 2)
 # corrélations a posteriori proche de 0 (faible corrélation entre les paramètres)
 # sauf entre a et iso -0.75  (normal (on pas un nombre de personnes similaire dans chaque groupe
 #cette différence crée une corrélation entre a et iso), pas de corrélation entre variables)
-"""       a  b _iso  b_size b_vacc
-a       1.00 -0.75  -0.03  -0.32
-b_iso  -0.75  1.00  -0.02   0.12
-b_size -0.03 -0.02   1.00   0.09
-b_vacc -0.32  0.12   0.09   1.00
+"""
+           a b_vacc c_size d_iso e_iso
+a       1.00  -0.27  -0.80 -0.45  0.00
+b_vacc -0.27   1.00   0.09  0.12 -0.01
+c_size -0.80   0.09   1.00  0.00  0.00
+d_iso  -0.45   0.12   0.00  1.00  0.00
+e_iso   0.00  -0.01   0.00  0.00  1.00
 """
 
 # 4. Apport des donnees : posterior vs prior
 
 post_M3 <- as.matrix(samples_M3)
 
-for (par_name in c("a", "b_vacc", "b_size", "b_iso")) {
+for (par_name in c("a", "b_vacc", "c_size", "d_iso", "e_iso")) {
   png(paste0("prior_posterior_", par_name, ".png"), width = 1000, height = 600, res = 120)
   hist(post_M3[, par_name], breaks = 50, prob = TRUE, xlim = c(-5, 5),
        main = paste("Posterior de", par_name), xlab = par_name,
@@ -142,23 +143,27 @@ for (par_name in c("a", "b_vacc", "b_size", "b_iso")) {
 # 5. Effets ajustes
 # sens de l'effet
 mean(post_M3[, "b_vacc"] < 0) # =1 => vaccination réduit risque
-mean(post_M3[, "b_iso"] < 0) # =1 => isolement réduit risque
-mean(post_M3[, "b_size"] > 0) # ~1 => plus grand foyer augmente risque
+mean(post_M3[, "d_iso"] < 0) # =1 => isolement réduit risque
+mean(post_M3[, "e_iso"] < 0)# =0,498 => isolement réduit risque
+mean(post_M3[, "c_size"] > 0) # ~9,8 => plus grand foyer augmente risque
 
 # taille de l'effet 
-exp(apply(post_M3[, c("b_vacc", "b_size", "b_iso")], 2, quantile, c(0.025, 0.5, 0.975)))
+exp(apply(post_M3[, c("b_vacc", "c_size", "d_iso", "e_iso")], 2, quantile, c(0.025, 0.5, 0.975)))
 # vaccination: odds d’infection sont divisés par environ 4,4 (1 / 0,23= 4,4)
 # isolement: odds d’infection sont divisés par environ 5,14 (1 / 0,19= 5,1)
 # odds d’infection sont augmenté d'environ 9% par personne suplémentaire
 quantile(post_M3[, "b_vacc"], c(0.025, 0.5, 0.975))
 '''2.5%        50%      97.5% 
--2.0357354 -1.4845661 -0.9718969 
+-2.0336178 -1.4856816 -0.9665277 
 '''
-quantile(post_M3[, "b_iso"],  c(0.025, 0.5, 0.975))
-'''2.5%       50%     97.5% 
--1.990271 -1.637842 -1.292367 
+quantile(post_M3[, "d_iso"],  c(0.025, 0.5, 0.975))
+'''     2.5%       50%     97.5% 
+-1.990509 -1.632518 -1.283018 
 ''' 
-# à comparer avec modèles précédents
+quantile(post_M3[, "e_iso"],  c(0.025, 0.5, 0.975))
+'''       2.5%         50%       97.5% 
+-4.83664397  0.01465433  4.91245252 
+''' 
 
 # 6. Posterior predictive check
 
