@@ -4,7 +4,7 @@ library(rjags)
 setwd("C:/Users/manch//Desktop/M2 Bioinfo/Stats/PROJET")
 
 
-## Jeu de données
+### Jeu de données
 
 
 df <- read.table("2021_05_14_full_database_2doses.txt")
@@ -79,8 +79,7 @@ samplesA <- coda.samples(
   n.iter = 10000
 )
 
-# Bonne convergence:
-
+# Bonne convergence: oui
 
 summary(samplesA)
 
@@ -109,7 +108,7 @@ quantile(exp(postA[, "b"]), c(0.025, 0.5, 0.975))
 hist(
   postA[, "a"],
   breaks = 50,
-  main = "M0 - Posterior de a",
+  main = "Posterior de a (M1 vaccin)",
   xlab = "a",
   col = "lightblue"
 )
@@ -117,31 +116,58 @@ hist(
 hist(
   postA[, "b"],
   breaks = 50,
-  main = "M0 - Posterior de b",
+  main = "Posterior de b (M1 vaccin)",
   xlab = "b",
   col = "lightblue"
 )
 
 
-## Probabilites d'infection a posteriori
 
-# Personnes non vaccinées
-pA_non_vaccinated <- plogis(postA[, "a"]) # transforme le logit en proba
-mean(pA_non_vaccinated)
-quantile(pA_non_vaccinated, c(0.025, 0.5, 0.975))
+### Proba d'infection a posteriori
 
-# Personnes protegees
+# proba a posteriori
+pA_non_vaccinated <- plogis(postA[, "a"])
 pA_vaccinated <- plogis(postA[, "a"] + postA[, "b"])
-mean(pA_vaccinated)
-quantile(pA_vaccinated, c(0.025, 0.5, 0.975))
+
+# tableau recap
+tableau_A <- data.frame(
+  Statut_vaccinal = c("Non vacciné", "Vacciné"),
+  
+  Probabilite_moyenne = round(100 * c(
+    mean(pA_non_vaccinated),
+    mean(pA_vaccinated)
+  ), 1),
+  
+  IC_95 = c(
+    paste0("[",
+           round(100 * quantile(pA_non_vaccinated, 0.025), 1),
+           " % ; ",
+           round(100 * quantile(pA_non_vaccinated, 0.975), 1),
+           " %]"),
+    
+    paste0("[",
+           round(100 * quantile(pA_vaccinated, 0.025), 1),
+           " % ; ",
+           round(100 * quantile(pA_vaccinated, 0.975), 1),
+           " %]")
+  ),
+  
+  Effectif = c(
+    sum(df_model$vaccination_status == 0),
+    sum(df_model$vaccination_status == 1)
+  )
+)
+
+print(tableau_A, row.names = FALSE)
 
 
-## Distribution a posteriori des probabilites
+
+## Distribution a posteriori des probabilites d'infection
 
 hist(
   pA_non_vaccinated,
   breaks = 50,
-  main = "M0 - Probabilite d'infection : non vacciné",
+  main = "Probabilite d'infection : non vacciné",
   xlab = "Probabilite d'infection",
   col = "lightblue"
 )
@@ -149,7 +175,7 @@ hist(
 hist(
   pA_vaccinated,
   breaks = 50,
-  main = "M0 - Probabilite d'infection : vacciné",
+  main = "Probabilite d'infection : vacciné",
   xlab = "Probabilite d'infection",
   col = "lightblue"
 )
@@ -174,23 +200,22 @@ simulatedA <- numeric(1000)
 simulatedA_non_vaccinated <- numeric(1000)
 simulatedA_vaccinated <- numeric(1000)
 
-N <- nrow(df_model)
 
 for (j in 1:1000) {
   
   a <- postA[j, "a"]
   b <- postA[j, "b"]
   
-  #Probabilite d'infection de chaque contact
+  # Proba d'infection de chaque contact
   p <- plogis(a + b * df_model$vaccination_status)
   
-  #Simuler les infections
+  # Simuler les infections
   infected_sim <- rbinom(N, size = 1, prob = p)
   
-  #Nombre total d'infectes
+  # Nombre total d'infectes
   simulatedA[j] <- sum(infected_sim)
   
-  # taux d'infection chez les no vaccines
+  #taux d'infection chez les no vaccines
   simulatedA_non_vaccinated[j] <- mean(
     infected_sim[df_model$vaccination_status == 0]
   )
@@ -207,30 +232,99 @@ quantile(simulatedA, c(0.025, 0.5, 0.975))
 observed
 
 hist(simulatedA, breaks = 30,
-     main = "PPC - Nombre d'infectés",
+     main = "PPC Nombre d'infectés",
      xlab = "Nombre d'infectés simulés")
 abline(v = observed, col = "red", lwd = 2)
+
 
 # Taux d'infection chez les non-vaccinés
 quantile(simulatedA_non_vaccinated, c(0.025, 0.5, 0.975))
 observed_non_vaccinated
 
 hist(simulatedA_non_vaccinated, breaks = 30,
-     main = "PPC - Non-vaccinés",
+     main = "PPC Non-vaccinés",
      xlab = "Taux d'infection simulé")
 abline(v = observed_non_vaccinated, col = "red", lwd = 2)
+
 
 # Taux d'infection chez les vaccinés
 quantile(simulatedA_vaccinated, c(0.025, 0.5, 0.975))
 observed_vaccinated
 
 hist(simulatedA_vaccinated, breaks = 30,
-     main = "PPC - Vaccinés",
+     main = "PPC Vaccinés",
      xlab = "Taux d'infection simulé")
 abline(v = observed_vaccinated, col = "red", lwd = 2)
 
 
 
+### Sensibilite aux priors
 
+
+# Nouveau prior pour b avec un prior plus large ecart type = 0.5
+
+
+model_M1_A_sensi <- "model {
+  a ~ dnorm(0, 1)
+  b ~ dnorm(0, 0.16)
+
+  for (i in 1:N) {
+    logit(p[i]) <- a + b * vaccinated[i]
+    infected[i] ~ dbern(p[i])
+  }
+}"
+
+model_jagsA_sensi <- jags.model(
+  textConnection(model_M1_A_sensi),
+  data = data_M1_A,
+  n.chains = 3
+)
+
+update(model_jagsA_sensi, 2000)
+
+samplesA_sensi <- coda.samples(
+  model_jagsA_sensi,
+  variable.names = c("a", "b"),
+  n.iter = 10000
+)
+
+postA_sensi <- as.matrix(samplesA_sensi)
+
+
+gelman.diag(samplesA_sensi)
+effectiveSize(samplesA_sensi)
+
+
+# Comparer les odds ratio a posteriori
+OR_initial <- exp(postA[, "b"])
+OR_sensi <- exp(postA_sensi[, "b"])
+
+
+comparaison_OR <- data.frame(
+  Prior = c("b ~ dnorm(0,1)", "b ~ dnorm(0,4)"),
+  OR_median = c(
+    median(OR_initial),
+    median(OR_sensi)
+  ),
+  IC_inf = c(
+    quantile(OR_initial, 0.025),
+    quantile(OR_sensi, 0.025)
+  ),
+  IC_sup = c(
+    quantile(OR_initial, 0.975),
+    quantile(OR_sensi, 0.975)
+  )
+)
+
+print(comparaison_OR, row.names = FALSE)
+
+# Comparer les proba d'infection
+
+p_vaccinated_sensi <- plogis(
+  postA_sensi[, "a"] + postA_sensi[, "b"]
+)
+
+mean(pA_vaccinated)
+mean(p_vaccinated_sensi)
 
 
