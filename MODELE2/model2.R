@@ -4,9 +4,15 @@ donnees <- read.table(file.choose(), header = FALSE)
 
 # Donner un nom à chaque des 10 colonnes 
 names(donnees) <- c(
-  "id", "foyer", "taille_foyer", "jour_infection",
-  "statut_infection", "statut_vaccinal", "fin_suivi",
-  "classe_age", "index_contact", "isolement"
+  "id", "foyer", 
+  "taille_foyer", 
+  "jour_infection",
+  "statut_infection",
+  "statut_vaccinal",
+  "fin_suivi",
+  "classe_age",
+  "index_contact",
+  "isolement"
 )
 
 # vérif les colonnes 
@@ -30,6 +36,10 @@ with(analyse, table(statut_vaccinal, infecte))
 
 ## donc dans notre échantillon, les vaccinés ont moins souvent été infectés
 
+
+
+
+
 ### PRÉPARER LES INFOS A TRANSMETTRE A JAGS ###
 
 data_jags <- list(
@@ -38,6 +48,10 @@ data_jags <- list(
   vacc = analyse$statut_vaccinal,
   taille_foyer = analyse$taille_foyer
 )
+
+
+
+
 
 ### DÉFINITION DU MODÈLE INTERMÉDIAIRE. ###
 
@@ -48,11 +62,16 @@ modele <- "model {
   c ~ dnorm(0,0.16)
 
   for (i in 1:N) {
-    logit(p[i]) <- a + b*vacc[i] + c*taille_foyer[i]
+    logit(p[i]) <- a + b*vacc[i] + c*(taille_foyer[i]-1)
     infecte[i] ~ dbern(p[i])
   }
 
 }"
+
+
+
+
+
 
 ### CHARGER LES OUTILS ET DÉFNIR POINTS DE DÉPART DES CHAINES ###
 
@@ -66,6 +85,7 @@ init <- list(
   list(a = -1, b = -1, c = 0.1),
   list(a = 1,  b = 1,  c = -0.1)
 )
+
 
 
 
@@ -84,7 +104,7 @@ c_vrai <- 0.1
 p_sim <- plogis(
   a_vrai +
     b_vrai * analyse$statut_vaccinal +
-    c_vrai * analyse$taille_foyer
+    c_vrai * (analyse$taille_foyer - 1)
 )
 
 # Simuler le statut infection de chaque contact
@@ -129,10 +149,11 @@ tirages_sim <- coda.samples(
 )
 
 # Examiner les chaînes et les estimations
-plot(tirages_sim)
+plot(tirages_sim, ask = FALSE)
 gelman.diag(tirages_sim, multivariate = FALSE)
 effectiveSize(tirages_sim)
 summary(tirages_sim)
+autocorr.plot(tirages_sim, ask = FALSE)
 
 
 
@@ -161,9 +182,11 @@ tirages <- coda.samples(
 
 # vérif convergence
 
-plot(tirages)
+plot(tirages, ask = FALSE)
 gelman.diag(tirages, multivariate = FALSE)
 effectiveSize(tirages)
+
+autocorr.plot(tirages, ask = FALSE)
 
 # veif à posteriori 
 
@@ -172,6 +195,53 @@ echantillons <- as.matrix(tirages) #Regrouper les tirages des trois chaînes dan
 mean(echantillons[, "b"] < 0) #Estimer la probabilité a posteriori que b soit négatif : vaccination associée à une probabilité d'infection plus faible, à taille de foyer identique
 mean(echantillons[, "c"] > 0) # Estimer la probabilité a posteriori que c soit positif : taille du foyer associée à une probabilité d'infection plus élevée, à statut vaccinal identique
 
+
+
+
+### COMPARER LE PRIOR ET LE POSTERIOR ###
+
+post_M2 <- as.matrix(tirages)
+
+for (par_name in c("a", "b", "c")) {
+  
+  hist(
+    post_M2[, par_name],
+    breaks = 50,
+    probability = TRUE,
+    xlim = switch(par_name, a = c(-2, 1), b = c(-3, 0), c = c(-0.1, 0.3)),
+    main = paste("M2 - Prior et posterior de", par_name),
+    xlab = par_name,
+    ylab = "Densité",
+    col = "lightblue",
+    border = "white"
+  )
+  
+# Prior
+  curve(
+    dnorm(x, mean = 0, sd = 2.5),
+    add = TRUE,
+    lwd = 3,
+    col = "steelblue3"
+  )
+  
+  legend(
+    "topright",
+    legend = c("Posterior", "Prior : moyenne 0, écart-type 2,5"),
+    fill = c("lightblue", NA),
+    border = c("white", NA),
+    lty = c(NA, 1),
+    lwd = c(NA, 3),
+    col = c(NA, "steelblue3"),
+    bty = "n"
+  )
+}
+
+
+
+
+### CORRÉLATIONS ENTRE LES PARAMÈTRES A POSTERIORI ###
+
+round(crosscorr(tirages), 2)
 
 
 
@@ -200,7 +270,7 @@ modele_large <- "model {
   c ~ dnorm(0, 0.01)
 
   for (i in 1:N) {
-    logit(p[i]) <- a + b*vacc[i] + c*taille_foyer[i]
+    logit(p[i]) <- a + b*vacc[i] + c*(taille_foyer[i]-1)
     infecte[i] ~ dbern(p[i])
   }
 }"
@@ -223,11 +293,11 @@ tirages_large <- coda.samples(
 )
 
 # Résultats
-plot(tirages_large)
+plot(tirages_large, ask = FALSE)
 gelman.diag(tirages_large, multivariate = FALSE)
 effectiveSize(tirages_large)
 summary(tirages_large)
-
+autocorr.plot(tirages_large, ask = FALSE)
 
 
 
@@ -252,7 +322,7 @@ for (j in 1:nrow(profils)) {
   p <- plogis(
     post[, "a"] +
       post[, "b"] * profils$vacc[j] +
-      post[, "c"] * profils$taille_foyer[j]
+      post[, "c"] * (profils$taille_foyer[j] - 1)
   )
   
   profils$p_moyenne[j] <- mean(p)
@@ -298,7 +368,7 @@ for (s in seq_along(indices)) {
   p_rep <- plogis(
     post[k, "a"] +
       post[k, "b"] * analyse$statut_vaccinal +
-      post[k, "c"] * analyse$taille_foyer
+      post[k, "c"] * (analyse$taille_foyer - 1)
   )
   
   #Simuler les infections des 667 contacts
@@ -326,26 +396,40 @@ print(comparaison_ppc)
 
 
 
+
 ### VÉRIFICATION PRÉDICTIVE PAR FOYER ###
 
 set.seed(789)
 
-# Nombre de contacts analysés et d'infectés dans chaque foyer
+# Nombre de contacts et d'infectes observéss dans chaque foyer
 n_contacts <- as.numeric(table(analyse$foyer))
-
 infectes_obs <- as.numeric(
   tapply(analyse$infecte, analyse$foyer, sum)
 )
 
-# Deux caractéristiques observées
+# Quatre caractéristiques à comparer
 observations <- c(
+  sum(analyse$infecte),
   sum(infectes_obs == 0),
-  sum(infectes_obs == n_contacts)
+  sum(infectes_obs == n_contacts),
+  sd(infectes_obs)
 )
 
-# Simuler ces mêmes caractéristiques avec le modèle
+# Nombre max de contacts analysés dans un foyer
+k_max <- max(n_contacts)
+
+# Nombre de foyers avec x contacts infectés
+frequences_obs <- as.numeric(
+  table(factor(infectes_obs, levels = 0:k_max))
+)
+
+# Stocker les résultats des simu
 stats_foyers <- matrix(
-  NA_real_, nrow = length(indices), ncol = 2
+  NA_real_, nrow = length(indices), ncol = 4
+)
+
+frequences_sim <- matrix(
+  NA_real_, nrow = length(indices), ncol = k_max + 1
 )
 
 for (s in seq_along(indices)) {
@@ -355,30 +439,55 @@ for (s in seq_along(indices)) {
   p_rep <- plogis(
     post[k, "a"] +
       post[k, "b"] * analyse$statut_vaccinal +
-      post[k, "c"] * analyse$taille_foyer
+      post[k, "c"] * (analyse$taille_foyer - 1)
   )
   
   y_rep <- rbinom(nrow(analyse), size = 1, prob = p_rep)
   
+  # Regrouper les infections simulées par foyer
   infectes_rep <- as.numeric(
     tapply(y_rep, analyse$foyer, sum)
   )
   
-  stats_foyers[s, 1] <- sum(infectes_rep == 0)
-  stats_foyers[s, 2] <- sum(infectes_rep == n_contacts)
+  # Calculer les quatre caractéristiques simulés
+  stats_foyers[s, 1] <- sum(y_rep)
+  stats_foyers[s, 2] <- sum(infectes_rep == 0)
+  stats_foyers[s, 3] <- sum(infectes_rep == n_contacts)
+  stats_foyers[s, 4] <- sd(infectes_rep)
+  
+  # Compter les foyers avec x contacts infectés
+  frequences_sim[s, ] <- as.numeric(
+    table(factor(infectes_rep, levels = 0:k_max))
+  )
 }
 
-# Tableau de comparaison
+# Comparaison des quatre caractéristiques
 comparaison_foyers <- data.frame(
-  situation = c(
-    "Aucun contact infecte",
-    "Tous les contacts infectes"
+  caracteristique = c(
+    "Nombre total d'infectes",
+    "Foyers sans contact infecte",
+    "Foyers avec tous les contacts infectes",
+    "Ecart-type du nombre d'infectes par foyer"
   ),
-  nombre_foyers_observe = observations,
+  observe = observations,
   moyenne_simulee = colMeans(stats_foyers),
   borne_inf_95 = apply(stats_foyers, 2, quantile, 0.025),
-  borne_sup_95 = apply(stats_foyers, 2, quantile, 0.975)
+  borne_sup_95 = apply(stats_foyers, 2, quantile, 0.975),
+  p_bayesien = colMeans(
+    sweep(stats_foyers, 2, observations, FUN = ">=")
+  )
 )
 
 print(comparaison_foyers)
+
+# Comparaison de la distribution du nombre d'infeces par foyer
+comparaison_distribution <- data.frame(
+  nombre_infectes = 0:k_max,
+  foyers_observes = frequences_obs,
+  moyenne_simulee = colMeans(frequences_sim),
+  borne_inf_95 = apply(frequences_sim, 2, quantile, 0.025),
+  borne_sup_95 = apply(frequences_sim, 2, quantile, 0.975)
+)
+
+print(comparaison_distribution)
 
