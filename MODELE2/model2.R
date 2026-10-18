@@ -4,9 +4,15 @@ donnees <- read.table(file.choose(), header = FALSE)
 
 # Donner un nom à chaque des 10 colonnes 
 names(donnees) <- c(
-  "id", "foyer", "taille_foyer", "jour_infection",
-  "statut_infection", "statut_vaccinal", "fin_suivi",
-  "classe_age", "index_contact", "isolement"
+  "id", "foyer", 
+  "taille_foyer", 
+  "jour_infection",
+  "statut_infection",
+  "statut_vaccinal",
+  "fin_suivi",
+  "classe_age",
+  "index_contact",
+  "isolement"
 )
 
 # vérif les colonnes 
@@ -30,6 +36,10 @@ with(analyse, table(statut_vaccinal, infecte))
 
 ## donc dans notre échantillon, les vaccinés ont moins souvent été infectés
 
+
+
+
+
 ### PRÉPARER LES INFOS A TRANSMETTRE A JAGS ###
 
 data_jags <- list(
@@ -38,6 +48,10 @@ data_jags <- list(
   vacc = analyse$statut_vaccinal,
   taille_foyer = analyse$taille_foyer
 )
+
+
+
+
 
 ### DÉFINITION DU MODÈLE INTERMÉDIAIRE. ###
 
@@ -54,6 +68,11 @@ modele <- "model {
 
 }"
 
+
+
+
+
+
 ### CHARGER LES OUTILS ET DÉFNIR POINTS DE DÉPART DES CHAINES ###
 
 library(rjags)
@@ -66,6 +85,7 @@ init <- list(
   list(a = -1, b = -1, c = 0.1),
   list(a = 1,  b = 1,  c = -0.1)
 )
+
 
 
 
@@ -188,7 +208,7 @@ for (par_name in c("a", "b", "c")) {
     post_M2[, par_name],
     breaks = 50,
     probability = TRUE,
-    xlim = if (par_name == "c") c(-0.1, 0.3) else c(-5, 5),
+    xlim = switch(par_name, a = c(-2, 1), b = c(-3, 0), c = c(-0.1, 0.3)),
     main = paste("M2 - Prior et posterior de", par_name),
     xlab = par_name,
     ylab = "Densité",
