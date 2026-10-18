@@ -31,7 +31,7 @@ logit(p[i]) = a + b × vacc[i] + c × (taille_foyer[i]-1)
 
 Le modèle suppose les infections indépendantes conditionnellement aux coefficients et aux variables explicatives. Il ne contient pas d’effet propre à chaque foyer.
 
-Les trois coefficients reçoivent un prior `dnorm(0, 0.16)`. Dans JAGS, le deuxième argument est la précision : ces priors ont donc une moyenne de **0** et un écart-type de **2,5**.
+Les coefficients a et b reçoivent un prior `dnorm(0, 1)`, soit une loi normale de moyenne 0 et d’écart-type 1. Pour c, nous utilisons `dnorm(0, 4)`, soit un écart-type de 0,5. Ces priors privilégient les coefficients proches de zéro et limitent les valeurs extrêmes. Nous vérifions ensuite la sensibilité des résultats avec des priors plus larges.
 
 Les bibliothèques `rjags` et `coda` sont chargées pour réaliser l’estimation et examiner les chaînes MCMC. Trois jeux de valeurs initiales différents sont préparés pour les trois chaînes.
 
@@ -55,7 +55,7 @@ Les vraies infections restent inchangées. Le bloc suivant utilisera ces donnée
 
 Nous ajustons le modèle aux infections simulées pour vérifier s’il retrouve des coefficients compatibles avec ceux utilisés pour les générer. Les valeurs connues de ces coefficients ne sont pas transmises à JAGS.
 
-Trois chaînes sont lancées avec 1000 itérations d’adaptation, puis 5000 itérations de burn-in, écartées pour réduire l’influence des points de départ. Nous conservons ensuite **10000 tirages par chaîne**, soit 30000 tirages au total.
+Trois chaînes sont lancées avec 1000 itérations d’adaptation, puis 2000 itérations de burn-in, écartées pour réduire l’influence des points de départ. Nous conservons ensuite **10000 tirages par chaîne**, soit 30000 tirages au total.
 
 ### Diagnostics des chaînes
 
@@ -63,7 +63,7 @@ Trois chaînes sont lancées avec 1000 itérations d’adaptation, puis 5000 it�
 
 À gauche, les tracés représentent l’évolution des coefficients au fil des itérations. Les trois chaînes se superposent sans dérive visible. À droite, les courbes représentent les distributions a posteriori des coefficients.
 
-Les diagnostics de Gelman–Rubin sont arrondis à **1** pour les trois coefficients. Les tailles effectives sont d’environ **1714 pour a**, **13077 pour b** et **1736 pour c**. Elles tiennent compte de la dépendance entre les tirages : les 30 000 tirages conservés ne sont pas tous indépendants. Ces éléments sont compatibles avec une bonne convergence.
+Les diagnostics de Gelman–Rubin sont arrondis à **1** pour les trois coefficients. Les tailles effectives sont d’environ **1940 pour a**, **14398 pour b** et **1976 pour c**. Elles tiennent compte de la dépendance entre les tirages : les 30 000 tirages conservés ne sont pas tous indépendants. Ces éléments sont compatibles avec une bonne convergence.
 
 Les graphiques suivants montrent l’autocorrélation des trois paramètres dans chacune des trois chaînes.
 
@@ -95,7 +95,7 @@ Nous ajustons le modèle aux infections observées chez les 667 contacts, afin d
 
 ![Traces des chaînes et distributions a posteriori sur les données réelles](PLOT/PLOT2.png)
 
-Les chaînes se superposent sans dérive visible. Les diagnostics de Gelman–Rubin sont arrondis à **1**. Les tailles effectives sont d’environ **1894 pour a**, **13793 pour b** et **1877 pour c**. Ces résultats sont compatibles avec une bonne convergence.
+Les chaînes se superposent sans dérive visible. Les diagnostics de Gelman–Rubin sont arrondis à **1**. Les tailles effectives sont d’environ **1806 pour a**, **13377 pour b** et **1914 pour c**. Ces résultats sont compatibles avec une bonne convergence.
 
 ![Autocorrélation sur les données réelles — première partie](PLOT/AUTOCOR2A.png)
 
@@ -109,9 +109,9 @@ L’autocorrélation diminue rapidement vers zéro pour `b`, mais plus lentement
 
 | Coefficient | Moyenne estimée | Intervalle de crédibilité à 95 % |
 |---|---:|---|
-| a — constante | −0,571 | [−0,957 ; −0,189] |
-| b — vaccination | −1,377 | [−1,904 ; −0,894] |
-| c — taille du foyer | 0,091 | [0,012 ; 0,172] |
+| a — constante | −0,558 | [−0,936 ; −0,180] |
+| b — vaccination | −1,318 | [−1,811 ; −0,846] |
+| c — taille du foyer | 0,088 | [0,011 ; 0,167] |
 
 - **Vaccination :** à taille de foyer identique, elle est associée à une probabilité d’infection plus faible. Tous les tirages conservés de `b` sont négatifs : la probabilité a posteriori estimée de `b < 0` est proche de 1, sans signifier une certitude absolue.
 
@@ -133,10 +133,6 @@ Nous comparons, pour chaque coefficient, la distribution choisie avant l’analy
 Les trois priors sont des lois normales de moyenne 0 et d’écart-type 2,5.
 
 ![Prior et posterior du coefficient a](PLOT/PRIOR1.png)
-
-![Prior et posterior du coefficient b](PLOT/PRIOR2.png)
-
-![Prior et posterior du coefficient c](PLOT/PRIOR3.png)
 
 Les distributions a posteriori sont beaucoup plus concentrées que les priors : les données ont réduit l’incertitude sur les coefficients.
 
@@ -165,30 +161,30 @@ Nous ajustons le même modèle aux mêmes données, en élargissant les priors d
 
 Dans JAGS, le deuxième argument de `dnorm` est la précision :
 
-- Prior initial : `dnorm(0, 0.16)`, soit un écart-type de 2,5.
-- Prior élargi : `dnorm(0, 0.01)`, soit un écart-type de 10.
+- Priors principaux : écart-type 1 pour a et b, 0,5 pour c.
+- Prior élargi : `dnorm(0, 0.01)`, soit un écart-type de 10 por les 3.
 
-Nous conservons les mêmes réglages : trois chaînes, 1000 itérations d’adaptation, 5000 de chauffe et 10000 tirages conservés par chaîne.
+Nous conservons les mêmes réglages : trois chaînes, 1000 itérations d’adaptation, 2000 de chauffe et 10000 tirages conservés par chaîne.
 
 ### Diagnostics des chaînes
 
 ![Traces des chaînes et distributions a posteriori avec les priors élargis](PLOT/PLOT3.png)
 
-Les indicateurs de Gelman–Rubin sont arrondis à **1** et les tailles effectives sont d’environ **1736 pour `a`**, **14255 pour `b`** et **1811 pour `c`**. Ces diagnostics numériques sont rassurants pour la convergence.
+Les indicateurs de Gelman–Rubin sont arrondis à **1** et les tailles effectives sont d’environ **1820 pour `a`**, **13909 pour `b`** et **1869 pour `c`**. Ces diagnostics numériques sont rassurants pour la convergence.
 
 ### Comparaison des résultats
 
 | Coefficient | Moyenne, prior initial | Moyenne, prior élargi | Intervalle crédible à 95 % avec le prior élargi |
 |---|---:|---:|---|
-| `a` : constante | −0,571 | −0,567 | [−0,957 ; −0,177] |
-| `b` : vaccination | −1,377 | −1,393 | [−1,919 ; −0,902] |
-| `c` : taille du foyer | 0,091 | 0,091 | [0,011 ; 0,172] |
+| `a` : constante | −0,558 | −0,571 | [−0,969 ; −0,188] |
+| `b` : vaccination | −1,318 | −1,391 | [−1,920 ; −0,902] |
+| `c` : taille du foyer | 0,088 | 0,092 | [0,012 ; 0,175] |
 
 Les estimations et les intervalles crédibles restent très proches de ceux obtenus avec les priors initiaux.
 
 À taille de foyer identique, la vaccination reste associée à une probabilité d’infection plus faible. À statut vaccinal identique, une taille de foyer plus élevée reste associée à une probabilité d’infection plus élevée.
 
-Les conclusions sont donc peu sensibles à cet élargissement des priors, dont l’écart-type passe de **2,5 à 10**. Nous conservons les tirages du modèle avec les priors initiaux pour la suite.
+Les estimations restent proches. Avec les priors resserrés, le coefficient de vaccination est légèrement rapproché de zéro, mais les conclusions sur le sens des associations restent inchangées.
 
 ## 9. Probabilités d’infection par profil
 
@@ -202,22 +198,22 @@ Pour chaque profil, chaque tirage des coefficients donne une probabilité d’in
 
 | Taille du foyer | Statut vaccinal | Probabilité moyenne | Intervalle crédible à 95 % | Effectif |
 |---|---|---:|---|---:|
-| 2 | Non vacciné | 38,3 % | [31,1 % ; 45,9 %] | 24 |
-| 2 | Vacciné | 13,8 % | [8,3 % ; 20,6 %] | 8 |
-| 4 | Non vacciné | 42,7 % | [37,8 % ; 47,6 %] | 95 |
-| 4 | Vacciné | 16,1 % | [10,2 % ; 22,9 %] | 45 |
-| 8 | Non vacciné | 51,7 % | [45,0 % ; 58,5 %] | 55 |
-| 8 | Vacciné | 21,6 % | [13,5 % ; 31,3 %] | 8 |
-| 12 | Non vacciné | 60,5 % | [47,1 % ; 73,2 %] | 20 |
-| 12 | Vacciné | 28,7 % | [15,5 % ; 44,9 %] | 0 |
+| 2 | Non vacciné | 38,5 % | [31,5 % ; 46,0 %] | 24 |
+| 2 | Vacciné | 14,6 % | [9,0 % ; 21,5 %] | 8 |
+| 4 | Non vacciné | 42,7 % | [37,9 % ; 47,6 %] | 95 |
+| 4 | Vacciné | 16,9 % | [11,1 % ; 23,6 %] | 45 |
+| 8 | Non vacciné | 51,4 % | [44,7 % ; 58,2 %] | 55 |
+| 8 | Vacciné | 22,4 % | [14,4 % ; 32,0 %] | 8 |
+| 12 | Non vacciné | 59,9 % | [46,5 % ; 72,4 %] | 20 |
+| 12 | Vacciné | 29,3 % | [16,3 % ; 45,3 %] | 0 |
 
 ### Interprétation
 
-À taille de foyer identique, le modèle estime une probabilité d’infection plus faible chez les vaccinés. Par exemple, dans un foyer de quatre personnes, elle est de **16,1 % pour un contact vacciné**, contre **42,7 % pour un contact non vacciné**.
+À taille de foyer identique, le modèle estime une probabilité d’infection plus faible chez les vaccinés. Par exemple, dans un foyer de quatre personnes, elle est de **16,9 % pour un contact vacciné**, contre **42,7 % pour un contact non vacciné**.
 
 Les probabilités moyennes augmentent avec la taille du foyer dans les deux groupes. Ces résultats traduisent les coefficients du modèle en probabilités, plus faciles à interpréter.
 
-Les intervalles crédibles indiquent l’incertitude sur ces probabilités. Par exemple, pour un contact vacciné dans un foyer de quatre personnes, l’intervalle est de **[10,2 % ; 22,9 %]**, autour d’une moyenne de 16,1 %.
+Les intervalles crédibles indiquent l’incertitude sur ces probabilités. Par exemple, pour un contact vacciné dans un foyer de quatre personnes, l’intervalle est de **[11,1 % ; 23,6 %]**, autour d’une moyenne de 16,9 %.
 
 Le profil « vacciné dans un foyer de 12 personnes » ne correspond à aucun contact observé. Le modèle peut néanmoins calculer une probabilité pour ce profil : il s’agit d’une extrapolation, à interpréter avec prudence.
 
@@ -244,8 +240,8 @@ Nous comparons ensuite ces proportions simulées aux proportions réellement obs
 
 | Groupe | Proportion observée | Moyenne simulée | Intervalle prédictif à 95 % |
 |---|---:|---:|---|
-| Non-vaccinés | 45,8 % | 45,7 % | [40,0 % ; 51,7 %] |
-| Vaccinés | 16,8 % | 17,1 % | [8,8 % ; 27,2 %] |
+| Non-vaccinés | 45,8 % | 45,6 % | [39,9 % ; 51,5 %] |
+| Vaccinés | 16,8 % | 18 % | [9,6 % ; 28 %] |
 
 L’intervalle prédictif contient les 95 % centraux des proportions simulées. Il tient compte de l’incertitude sur les coefficients et du hasard dans les infections générées.
 
@@ -275,16 +271,16 @@ Les cas index et les personnes ayant une infection antérieure restent exclus de
 
 | Caractéristique | Valeur observée | Moyenne simulée | Intervalle prédictif à 95 % |
 |---|---:|---:|---|
-| Total d’infectés | 269 | 269,4 | [235 ; 303] |
-| Foyers sans contact infecté | 97 | 62,9 | [49 ; 78] |
-| Foyers avec tous les contacts analysés infectés | 43 | 22,1 | [13 ; 32] |
-| Écart-type du nombre d’infectés par foyer | 1,62 | 1,27 | [1,11 ; 1,46] |
+| Total d’infectés | 269 | 269,6 | [235 ; 303] |
+| Foyers sans contact infecté | 97 | 62,4 | [48 ; 77] |
+| Foyers avec tous les contacts analysés infectés | 43 | 22,3 | [14 ; 32] |
+| Écart-type du nombre d’infectés par foyer | 1,62 | 1,26 | [1,10 ; 1,43] |
 
 Les intervalles prédictifs contiennent les 95 % centraux des valeurs simulées.
 
 ### Interprétation
 
-Le modèle reproduit bien le total d’infectés : 269 observés contre 269,4 en moyenne dans les simulations.
+Le modèle reproduit bien le total d’infectés : 269 observés contre 269,6 en moyenne dans les simulations.
 
 En revanche, il produit trop peu de foyers sans infection et de foyers où tous les contacts analysés sont infectés. Les nombres observés, respectivement **97 et 43**, dépassent les bornes supérieures des intervalles prédictifs.
 

@@ -57,9 +57,9 @@ data_jags <- list(
 
 modele <- "model {
 
-  a ~ dnorm(0,0.16)
-  b ~ dnorm(0,0.16)
-  c ~ dnorm(0,0.16)
+  a ~ dnorm(0,1)
+  b ~ dnorm(0,1)
+  c ~ dnorm(0,4)
 
   for (i in 1:N) {
     logit(p[i]) <- a + b*vacc[i] + c*(taille_foyer[i]-1)
@@ -138,8 +138,8 @@ modele_sim <- jags.model(
   n.adapt = 1000
 )
 
-# Écarter les 5k premières itérations
-update(modele_sim, n.iter = 5000)
+# Écarter les 2k premières itérations
+update(modele_sim, n.iter = 2000)
 
 # Conserver les tirages des coefficients
 tirages_sim <- coda.samples(
@@ -170,7 +170,7 @@ modele_jags <- jags.model(
 
 # burn in 
 
-update(modele_jags, n.iter = 5000)
+update(modele_jags, n.iter = 2000)
 
 # on conserve 10k tirage par chaine
 
@@ -204,11 +204,19 @@ post_M2 <- as.matrix(tirages)
 
 for (par_name in c("a", "b", "c")) {
   
+  # Écart-type du prior : 1 pour a et b, 0,5 pour c
+  sd_prior <- if (par_name == "c") 0.5 else 1
+  
   hist(
     post_M2[, par_name],
     breaks = 50,
     probability = TRUE,
-    xlim = switch(par_name, a = c(-2, 1), b = c(-3, 0), c = c(-0.1, 0.3)),
+    xlim = switch(
+      par_name,
+      a = c(-2, 1),
+      b = c(-3, 0),
+      c = c(-0.1, 0.3)
+    ),
     main = paste("M2 - Prior et posterior de", par_name),
     xlab = par_name,
     ylab = "Densité",
@@ -216,9 +224,8 @@ for (par_name in c("a", "b", "c")) {
     border = "white"
   )
   
-# Prior
   curve(
-    dnorm(x, mean = 0, sd = 2.5),
+    dnorm(x, mean = 0, sd = sd_prior),
     add = TRUE,
     lwd = 3,
     col = "steelblue3"
@@ -226,7 +233,10 @@ for (par_name in c("a", "b", "c")) {
   
   legend(
     "topright",
-    legend = c("Posterior", "Prior : moyenne 0, écart-type 2,5"),
+    legend = c(
+      "Posterior",
+      paste("Prior : moyenne 0, écart-type", sd_prior)
+    ),
     fill = c("lightblue", NA),
     border = c("white", NA),
     lty = c(NA, 1),
@@ -284,7 +294,7 @@ jags_large <- jags.model(
   n.adapt = 1000
 )
 
-update(jags_large, n.iter = 5000)
+update(jags_large, n.iter = 2000)
 
 tirages_large <- coda.samples(
   model = jags_large,
