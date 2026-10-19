@@ -19,7 +19,7 @@ Nous cherchons à estimer la probabilité d’infection d’un contact en prenan
 
 Pour chaque contact `i`, l’infection suit une loi Bernoulli de probabilité `p[i]`, avec :
 
-logit(p[i]) = a + b × vacc[i] + c × (taille_foyer[i]-1)
+logit(p[i]) = a + b × vacc[i] + c × (taille_foyer[i]-2)
 
 - `a` : constante sur l’échelle logit.
 - `b` : association avec la vaccination à taille de foyer identique.
@@ -37,8 +37,8 @@ Pour tester l’estimation, nous générons des infections fictives avec des coe
 
 | Statut simulé | Nombre de contacts |
 |---|---:|
-| Non infecté | 371 |
-| Infecté | 296 |
+| Non infecté | 396 |
+| Infecté | 271 |
 | **Total** | **667** |
 
 
@@ -54,7 +54,7 @@ Trois chaînes sont lancées avec 1000 itérations d’adaptation, puis 2000 it�
 
 Les trois chaînes se superposent sans dérive. 
 
-Les diagnostics de Gelman–Rubin sont arrondis à 1 pour les trois coefficients. Les tailles effectives sont d’environ 1940 pour a, 14398 pour b et 1976 pour c.
+Les diagnostics de Gelman–Rubin sont arrondis à 1 pour les trois coefficients. Les tailles effectives sont d’environ 2760 pour a, 13357 pour b et 2846 pour c.
 
 Les graphiques suivants montrent l’autocorrélation des trois paramètres dans chacune des trois chaînes.
 
@@ -68,11 +68,11 @@ L’axe Lag représente le nombre d’itérations séparant les tirages comparé
 
 ### Comparaison aux coefficients connus
 
-| Coefficient | Valeur utilisée pour simuler | Moyenne estimée | Intervalle de crédibilité à 95 % |
+| Coefficient | Valeur utilisée pour simuler | Moyenne estimée | Intervalle crédible à 95 % |
 |---|---:|---:|---|
-| a | −0,5 | −0,382 | [−0,770 ; 0,009] |
-| b | −1 | −1,227 | [−1,696 ; −0,779] |
-| c | 0,1 | 0,084 | [0,004 ; 0,165] |
+| a | −0,5 | −0,389 | [−0,705 ; −0,070] |
+| b | −1 | −1,117 | [−1,578 ; −0,668] |
+| c | 0,1 | 0,059 | [−0,021 ; 0,139] |
 
 Les trois valeurs connues sont comprises dans leurs intervalles de crédibilité. Les écarts entre valeurs choisies et estimées sont compatibles avec la variabilité des données simulées.
 
@@ -84,7 +84,7 @@ Ce test est rassurant pour le fonctionnement de la procédure d’estimation.
 
 ![Traces des chaînes et distributions a posteriori sur les données réelles](PLOT/PLOT2.png)
 
-Les chaînes se superposent sans dérive . Les diagnostics de Gelman Rubin sont arrondis à 1. Les tailles effectives sont d’environ 1806 pour a, 13377 pour b et 1914 pour c (nous avons une bonne convergence).
+Les chaînes se superposent sans dérive . Les diagnostics de Gelman Rubin sont arrondis à 1. Les tailles effectives sont d’environ 2842 pour a, 14251 pour b et 2884 pour c (nous avons une bonne convergence).
 
 ![Autocorrélation sur les données réelles — première partie](PLOT/AUTOCOR2A.png)
 
@@ -94,17 +94,17 @@ Les chaînes se superposent sans dérive . Les diagnostics de Gelman Rubin sont 
 
 ### Estimations et interprétation
 
-| Coefficient | Moyenne estimée | Intervalle de crédibilité à 95 % |
+| Coefficient | Moyenne estimée | Intervalle crédible à 95 % |
 |---|---:|---|
-| a - constante | −0,558 | [−0,936 ; −0,180] |
-| b - vaccination | −1,318 | [−1,811 ; −0,846] |
-| c - taille du foyer | 0,088 | [0,011 ; 0,167] |
+| a — constante | −0,472 | [−0,785 ; −0,156] |
+| b — vaccination | −1,314 | [−1,806 ; −0,845] |
+| c — taille du foyer | 0,088 | [0,007 ; 0,167] |
 
 - **Vaccination :** à taille de foyer identique, elle est associée à une probabilité d’infection plus faible. Tous les tirages conservés de `b` sont négatifs : la probabilité a posteriori estimée de `b < 0` est proche de 1, sans signifier une certitude absolue.
 
-- **Taille du foyer :** à statut vaccinal identique, une taille plus élevée est associée à une probabilité d’infection plus grande. La probabilité a posteriori estimée de `c > 0` est de **98,92%**.
+- **Taille du foyer :** à statut vaccinal identique, une taille plus élevée est associée à une probabilité d’infection plus grande. La probabilité a posteriori estimée de `c > 0` est de **98,39%**.
 
-- **Constante :**  `a` correspond au logit de la probabilité pour un contact non vacciné dans un foyer d’une personne. Cette référence reste théorique, car les foyers analysés comptent au moins deux personnes.
+- **Constante :** `a` correspond au logit de la probabilité d’infection d’un contact non vacciné dans un foyer de deux personnes.
 
 ## 6. Comparaison entre prior et posterior
 
@@ -124,8 +124,8 @@ Une corrélation proche de 1 indique qu’ils tendent à augmenter ensemble,  pr
 
 | Paramètres | Corrélation |
 |---|---:|
-| a et b | −0,22 |
-| a et c | −0,90 |
+| a et b | −0,24 |
+| a et c | −0,85 |
 | b et c | 0,08 |
 
 La constante `a` et le coefficient de taille du foyer `c` présentent une forte corrélation négative. Une augmentation de `c` peut être partiellement compensée par une diminution de `a`, tout en conservant des probabilités d’infection similaires pour les profils observés.
@@ -148,9 +148,9 @@ Nous avons une bonne convergence.
 
 | Coefficient | Moyenne, prior initial | Moyenne, prior élargi | Intervalle crédible à 95 % avec le prior élargi |
 |---|---:|---:|---|
-| `a` : constante | −0,558 | −0,571 | [−0,969 ; −0,188] |
-| `b` : vaccination | −1,318 | −1,391 | [−1,920 ; −0,902] |
-| `c` : taille du foyer | 0,088 | 0,092 | [0,012 ; 0,175] |
+| a - constante | −0,472 | −0,484 | [−0,801 ; −0,172] |
+| b - vaccination | −1,314 | −1,390 | [−1,913 ; −0,908] |
+| c - taille du foyer | 0,088 | 0,093 | [0,013 ; 0,173] |
 
 Les estimations et les intervalles crédibles restent très proches de ceux obtenus avec les priors initiaux.
 
@@ -164,14 +164,14 @@ Pour chaque profil, chaque tirage des coefficients donne une probabilité d’in
 
 | Taille du foyer | Statut vaccinal | Probabilité moyenne | Intervalle crédible à 95 % | Effectif |
 |---|---|---:|---|---:|
-| 2 | Non vacciné | 38,5 % | [31,5 % ; 46,0 %] | 24 |
-| 2 | Vacciné | 14,6 % | [9,0 % ; 21,5 %] | 8 |
+| 2 | Non vacciné | 38,5 % | [31,3 % ; 46,1 %] | 24 |
+| 2 | Vacciné | 14,6 % | [9,0 % ; 21,6 %] | 8 |
 | 4 | Non vacciné | 42,7 % | [37,9 % ; 47,6 %] | 95 |
-| 4 | Vacciné | 16,9 % | [11,1 % ; 23,6 %] | 45 |
-| 8 | Non vacciné | 51,4 % | [44,7 % ; 58,2 %] | 55 |
-| 8 | Vacciné | 22,4 % | [14,4 % ; 32,0 %] | 8 |
-| 12 | Non vacciné | 59,9 % | [46,5 % ; 72,4 %] | 20 |
-| 12 | Vacciné | 29,3 % | [16,3 % ; 45,3 %] | 0 |
+| 4 | Vacciné | 16,9 % | [11,0 % ; 23,7 %] | 45 |
+| 8 | Non vacciné | 51,4 % | [44,5 % ; 58,1 %] | 55 |
+| 8 | Vacciné | 22,5 % | [14,4 % ; 32,0 %] | 8 |
+| 12 | Non vacciné | 59,9 % | [45,9 % ; 72,5 %] | 20 |
+| 12 | Vacciné | 29,4 % | [16,2 % ; 45,4 %] | 0 |
 
 ### Interprétation
 
@@ -227,10 +227,10 @@ Pour chaque simulation, nous comptons les infectés dans chaque foyer, puis calc
 
 | Caractéristique | Valeur observée | Moyenne simulée | Intervalle prédictif à 95 % |
 |---|---:|---:|---|
-| Total d’infectés | 269 | 269,6 | [235 ; 303] |
-| Foyers sans contact infecté | 97 | 62,4 | [48 ; 77] |
-| Foyers avec tous les contacts analysés infectés | 43 | 22,3 | [14 ; 32] |
-| Écart-type du nombre d’infectés par foyer | 1,62 | 1,26 | [1,10 ; 1,43] |
+| Total d’infectés | 269 | 269,5 | [234 ; 304] |
+| Foyers sans contact infecté | 97 | 62,4 | [48 ; 78] |
+| Foyers avec tous les contacts analysés infectés | 43 | 22,3 | [13 ; 33] |
+| Écart-type du nombre d’infectés par foyer | 1,62 | 1,26 | [1,09 ; 1,43] |
 
 ### Interprétation
 

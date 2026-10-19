@@ -62,7 +62,7 @@ modele <- "model {
   c ~ dnorm(0,4)
 
   for (i in 1:N) {
-    logit(p[i]) <- a + b*vacc[i] + c*(taille_foyer[i]-1)
+    logit(p[i]) <- a + b*vacc[i] + c*(taille_foyer[i]-2)
     infecte[i] ~ dbern(p[i])
   }
 
@@ -104,7 +104,7 @@ c_vrai <- 0.1
 p_sim <- plogis(
   a_vrai +
     b_vrai * analyse$statut_vaccinal +
-    c_vrai * (analyse$taille_foyer - 1)
+    c_vrai * (analyse$taille_foyer - 2)
 )
 
 # Simuler le statut infection de chaque contact
@@ -280,7 +280,7 @@ modele_large <- "model {
   c ~ dnorm(0, 0.01)
 
   for (i in 1:N) {
-    logit(p[i]) <- a + b*vacc[i] + c*(taille_foyer[i]-1)
+    logit(p[i]) <- a + b*vacc[i] + c*(taille_foyer[i]-2)
     infecte[i] ~ dbern(p[i])
   }
 }"
@@ -332,7 +332,7 @@ for (j in 1:nrow(profils)) {
   p <- plogis(
     post[, "a"] +
       post[, "b"] * profils$vacc[j] +
-      post[, "c"] * (profils$taille_foyer[j] - 1)
+      post[, "c"] * (profils$taille_foyer[j] - 2)
   )
   
   profils$p_moyenne[j] <- mean(p)
@@ -378,7 +378,7 @@ for (s in seq_along(indices)) {
   p_rep <- plogis(
     post[k, "a"] +
       post[k, "b"] * analyse$statut_vaccinal +
-      post[k, "c"] * (analyse$taille_foyer - 1)
+      post[k, "c"] * (analyse$taille_foyer - 2)
   )
   
   #Simuler les infections des 667 contacts
@@ -449,7 +449,7 @@ for (s in seq_along(indices)) {
   p_rep <- plogis(
     post[k, "a"] +
       post[k, "b"] * analyse$statut_vaccinal +
-      post[k, "c"] * (analyse$taille_foyer - 1)
+      post[k, "c"] * (analyse$taille_foyer - 2)
   )
   
   y_rep <- rbinom(nrow(analyse), size = 1, prob = p_rep)
