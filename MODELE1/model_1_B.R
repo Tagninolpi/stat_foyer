@@ -1,446 +1,312 @@
-################################
-##### Modele 0, taille du foyer:
-#####################################
+library(coda)
+library(rjags)
+
+setwd("C:/Users/manch//Desktop/M2 Bioinfo/Stats/PROJET")
+
+### Jeu de données
+
+df <- read.table("2021_05_14_full_database_2doses.txt")
+
+colnames(df) <- c(
+  "individual_id",
+  "house_id",
+  "household_size",
+  "date_symptom",
+  "infection_status",
+  "vaccination_status",
+  "end_follow_up",
+  "age",
+  "index_cases",
+  "isolation_status"
+)
+
+df_model <- df[df$index_cases == 0, ] 
+df_model <- df_model[df_model$vaccination_status %in% c(0, 1), ] 
+df_model$infected <- ifelse(df_model$infection_status == 0, 0, 1)
+
+N <- nrow(df_model)
+N
+
+## Param check
+
+plogis(qnorm(c(0.025, 0.975), mean = 0, sd = 1))
+exp(qnorm(c(0.025, 0.975), mean = 0, sd = 1))
 
 
+### Modele 1 B, taille du foyer:
 
-model_M0_B <- "model {
+
+model_M1_B <- "model {
   a ~ dnorm(0, 1)
-  b ~ dnorm(0, 4)
+  c ~ dnorm(0, 4)
 
   for (i in 1:N) {
-    logit(p[i]) <- a + b * (size[i] - 2)
+    logit(p[i]) <- a + c * (size[i] - 2) 
     infected[i] ~ dbern(p[i])
   }
 }"
 
+# On fait size[i] - 2 car l'intercept a représente la proba d'infection quand la taille 
+# du foyer est de 2. En plus la taille minimale d'un foyer dans notre jeux de données est de 2
 
-data_M0_B <- list(N = N, infected = df$infected, size = df$household_size)
+# A check le householdsize
+data_M1_B <- list(N = N, infected = df_model$infected, size = df_model$household_size)
 
-model_jags1 <- jags.model(
-  textConnection(model_M0_B),
-  data = data_M0_B,
+model_jagsB <- jags.model(
+  textConnection(model_M1_B),
+  data = data_M1_B,
   n.chains = 3
 )
 
-update(model_jags1, 2000)
+update(model_jagsB, 2000)
 
-samples1 <- coda.samples(
-  model_jags1,
-  variable.names = c("a", "b"),
+samplesB <- coda.samples(
+  model_jagsB,
+  variable.names = c("a", "c"),
   n.iter = 10000
 )
 
+summary(samplesB)
+gelman.diag(samplesB) 
+effectiveSize(samplesB)
+plot(samplesB)
+autocorr.plot(samplesB)
 
-summary(samples1)
-gelman.diag(samples1) 
-effectiveSize(samples1)
-plot(samples1)
-autocorr.plot(samples1)
 
-# Distribution a posteriori des parametres
 
-post1 <- as.matrix(samples1)
+### Posterior:
 
-# OR a posteriori : effet d'une personne supplémentaire
-quantile(exp(post1[, "b"]), c(0.025, 0.5, 0.975))
+## Distribution a posteriori des parametres
+
+postB <- as.matrix(samplesB)
+
+# OR a posteriori : effet de la taille du foyer
+quantile(exp(postB[, "c"]), c(0.025, 0.5, 0.975))
+
 
 hist(
-  post1[, "a"],
+  postB[, "a"],
   breaks = 50,
-  main = "M1 - Posterior de a",
+  main = "Posterior de a (M1 taille du foyer)",
   xlab = "a",
   col = "lightblue"
 )
 
 hist(
-  post1[, "b"],
+  postB[, "c"],
   breaks = 50,
-  main = "M1 - Posterior de b",
-  xlab = "b",
+  main = "Posterior de c (M1 taille du foyer)",
+  xlab = "c",
   col = "lightblue"
 )
 
-## Probabilites d'infection a posteriori
 
-# Les differentes tailles de foyer
-house_sizes <- sort(unique(df$household_size))
-house_sizes
 
-# Tableau pour stocker les resultats
-profiles1 <- data.frame(
-  household_size = house_sizes,
-  mean_p = NA,
-  median_p = NA,
-  lower_95 = NA,
-  upper_95 = NA
+### Proba d'infection a posteriori
+
+# proba a posteriori
+tailles <- sort(unique(df_model$household_size))
+
+pB <- sapply(tailles, function(taille) {
+  plogis(postB[, "a"] + postB[, "c"] * (taille - 2))
+})
+
+# tableau recap
+tableau_B <- data.frame(
+  Taille_foyer = tailles,
+  
+  Probabilite_moyenne = round(100 * colMeans(pB), 1),
+  
+  IC_95 = sapply(1:ncol(pB), function(i) {
+    paste0("[",
+           round(100 * quantile(pB[, i], 0.025), 1),
+           " % ; ",
+           round(100 * quantile(pB[, i], 0.975), 1),
+           " %]")
+  }),
+  
+  Effectif = as.integer(table(
+    factor(df_model$household_size, levels = tailles)
+  ))
 )
 
-# Calcul du posterior de p pour chaque taille du foyer
-for (j in 1:nrow(profiles1)) {
-  
-  L_post <- post1[, "a"] +
-    post1[, "b"] * (profiles1$household_size[j] - 2)
-  
-  p_post <- plogis(L_post)
-  
-  profiles1$mean_p[j] <- mean(p_post)
-  profiles1$median_p[j] <- median(p_post)
-  profiles1$lower_95[j] <- quantile(p_post, 0.025)
-  profiles1$upper_95[j] <- quantile(p_post, 0.975)
+print(tableau_B, row.names = FALSE)
+
+
+
+## Distribution a posteriori des probabilites d'infection
+
+for (i in seq_along(tailles)) {
+  hist(
+    pB[, i],
+    breaks = 50,
+    main = paste("Probabilite d'infection : foyer de", tailles[i], "personnes"),
+    xlab = "Probabilite d'infection",
+    col = "lightblue"
+  )
 }
 
-profiles1
 
 
-## Distribution a posteriori des probabilites
+### PPC
 
+# Nombre total d'infectes obs
+observed <- sum(df_model$infected)
 
-# Exemple pour un foyer de 3 personnes
-p1_size3 <- plogis(post1[, "a"] + post1[, "b"] * (3 - 2))
+# Taux d'infection obs par taille
+observed_B <- sapply(tailles, function(taille) {
+  mean(df_model$infected[df_model$household_size == taille])
+})
 
-hist(
-  p1_size3,
-  breaks = 50,
-  main = "M1 - Probabilite d'infection : foyer de 3 personnes",
-  xlab = "Probabilite d'infection",
-  col = "lightblue"
-)
+# Stocker les simulations
+simulatedB <- numeric(1000)
+simulatedB_tailles <- matrix(NA, nrow = 1000, ncol = length(tailles))
 
+colnames(simulatedB_tailles) <- tailles
 
-
-## Comparaison observe vs predit
-
-# Probabilites observees
-observed1 <- aggregate(
-  infected ~ household_size,
-  data = df,
-  FUN = mean
-)
-
-print(observed1)
-
-names(observed1)[2] <- "observed_p"
-
-
-# Comparaison
-comparison1 <- merge(
-  observed1,
-  profiles1,
-  by = "household_size"
-)
-
-comparison1
-comparison1[, c("household_size", "observed_p", "mean_p")]
-
-
-## Graphique observe vs predit
-
-barplot(
-  rbind(comparison1$observed_p, comparison1$mean_p),
-  beside = TRUE,
-  names.arg = comparison1$household_size,
-  col = c("steelblue", "orange"),
-  ylim = c(0, 1),
-  xlab = "Taille du foyer",
-  ylab = "Probabilite d'infection",
-  main = "M1 - Observe vs predit"
-)
-
-legend(
-  "topright",
-  legend = c("Observe", "Predit"),
-  fill = c("steelblue", "orange")
-)
-
-
-
-
-################################
-##### Modele 0, isolement:
-#####################################
-
-
-# Modèle JAGS
-model_M0_C <- "model {
-  a ~ dnorm(0, 1)
-  d ~ dnorm(0, 1)
-  e ~ dnorm(-1, 1)
-
-  for (i in 1:N) {
-    logit(p[i]) <- a + d * (isolation[i] == 1) + e * (isolation[i] == 2)
-
-    infected[i] ~ dbern(p[i])
-  }
-}"
-
-# Données
-data_M0_C <- list(
-  N = N,
-  infected = df$infected,
-  isolation = df$isolation_status
-)
-
-# Création du modèle
-model_jags2 <- jags.model(
-  textConnection(model_M0_C),
-  data = data_M0_C,
-  n.chains = 3
-)
-
-# Burn-in
-update(model_jags2, 2000)
-
-# Échantillonnage
-samples2 <- coda.samples(
-  model_jags2,
-  variable.names = c("a", "d", "e"),
-  n.iter = 10000
-)
-
-#######################################
-##### CONVERGENCE
-#######################################
-
-summary(samples2)
-gelman.diag(samples2)
-effectiveSize(samples2)
-
-plot(samples2)
-autocorr.plot(samples2)
-
-#######################################
-##### DISTRIBUTIONS A POSTERIORI
-#######################################
-
-post2 <- as.matrix(samples2)
-
-hist(
-  post2[, "a"],
-  breaks = 50,
-  main = "M0-C - Posterior de a",
-  xlab = "a",
-  col = "lightblue"
-)
-
-hist(
-  post2[, "d"],
-  breaks = 50,
-  main = "M0-C - Posterior de d",
-  xlab = "d",
-  col = "lightblue"
-)
-
-hist(
-  post2[, "e"],
-  breaks = 50,
-  main = "M0-C - Posterior de e",
-  xlab = "e",
-  col = "lightblue"
-)
-
-#######################################
-##### ODDS RATIOS A POSTERIORI
-#######################################
-
-# Isolement 1 par rapport à 0
-quantile(
-  exp(post2[, "d"]),
-  c(0.025, 0.5, 0.975)
-)
-
-# Isolement 2 par rapport à 0
-quantile(
-  exp(post2[, "e"]),
-  c(0.025, 0.5, 0.975)
-)
-
-#######################################
-##### PROBABILITES A POSTERIORI
-#######################################
-
-# Catégorie 0
-p2_iso0 <- plogis(post2[, "a"])
-
-# Catégorie 1
-p2_iso1 <- plogis(post2[, "a"] + post2[, "d"])
-
-# Catégorie 2
-p2_iso2 <- plogis(post2[, "a"] + post2[, "e"])
-
-# Résumés des probabilités
-profiles2 <- data.frame(
-  isolation_status = c(0, 1, 2),
-  
-  mean_p = c(
-    mean(p2_iso0),
-    mean(p2_iso1),
-    mean(p2_iso2)
-  ),
-  
-  median_p = c(
-    median(p2_iso0),
-    median(p2_iso1),
-    median(p2_iso2)
-  ),
-  
-  lower_95 = c(
-    quantile(p2_iso0, 0.025),
-    quantile(p2_iso1, 0.025),
-    quantile(p2_iso2, 0.025)
-  ),
-  
-  upper_95 = c(
-    quantile(p2_iso0, 0.975),
-    quantile(p2_iso1, 0.975),
-    quantile(p2_iso2, 0.975)
-  )
-)
-
-profiles2
-
-#######################################
-##### HISTOGRAMMES DES PROBABILITES
-#######################################
-
-hist(
-  p2_iso0,
-  breaks = 50,
-  main = "M0-C - Probabilite : isolement 0",
-  xlab = "Probabilite d'infection",
-  col = "lightblue"
-)
-
-hist(
-  p2_iso1,
-  breaks = 50,
-  main = "M0-C - Probabilite : isolement 1",
-  xlab = "Probabilite d'infection",
-  col = "lightblue"
-)
-
-hist(
-  p2_iso2,
-  breaks = 50,
-  main = "M0-C - Probabilite : isolement 2",
-  xlab = "Probabilite d'infection",
-  col = "lightblue"
-)
-
-#######################################
-##### OBSERVE VS PREDIT
-#######################################
-
-observed2 <- aggregate(
-  infected ~ isolation_status,
-  data = df,
-  FUN = mean
-)
-
-names(observed2)[2] <- "observed_p"
-
-comparison2 <- merge(
-  observed2,
-  profiles2,
-  by = "isolation_status"
-)
-
-comparison2
-
-barplot(
-  rbind(
-    comparison2$observed_p,
-    comparison2$mean_p
-  ),
-  beside = TRUE,
-  names.arg = comparison2$isolation_status,
-  col = c("steelblue", "orange"),
-  ylim = c(0, 1),
-  xlab = "Categorie d'isolement",
-  ylab = "Probabilite d'infection",
-  main = "M0-C - Observe vs predit"
-)
-
-legend(
-  "topright",
-  legend = c("Observe", "Predit"),
-  fill = c("steelblue", "orange")
-)
-
-#######################################
-##### POSTERIOR PREDICTIVE CHECK
-#######################################
-
-observed <- sum(df$infected)
-
-simulated2 <- numeric(1000)
+indices <- sample(1:nrow(postB), 1000)
 
 for (j in 1:1000) {
   
-  a <- post2[j, "a"]
-  d <- post2[j, "d"]
-  e <- post2[j, "e"]
+  a <- postB[indices[j], "a"]
+  c <- postB[indices[j], "c"]
   
-  # Probabilité pour chaque contact
-  p <- plogis(
-    a +
-      d * (df$isolation_status == 1) +
-      e * (df$isolation_status == 2)
-  )
+  # Proba d'infection de chaque contact
+  p <- plogis(a + c * (df_model$household_size - 2))
   
-  # Simulation des infections
-  infected_sim <- rbinom(
-    N,
-    size = 1,
-    prob = p
-  )
+  # Simuler les infections
+  infected_sim <- rbinom(N, size = 1, prob = p)
   
-  simulated2[j] <- sum(infected_sim)
+  # Nombre total d'infectes
+  simulatedB[j] <- sum(infected_sim)
+  
+  # taux d'infection selon la taille du foyer
+  simulatedB_tailles[j, ] <- sapply(tailles, function(taille) {
+    mean(infected_sim[df_model$household_size == taille])
+  })
 }
 
-hist(
-  simulated2,
-  breaks = 30,
-  main = "M0-C - PPC",
-  xlab = "Nombre d'infectes simules",
-  col = "lightblue"
+
+# Nombre total d'infectés
+quantile(simulatedB, c(0.025, 0.5, 0.975))
+observed
+
+hist(simulatedB, breaks = 30,
+     main = "PPC Nombre d'infectés",
+     xlab = "Nombre d'infectés simulés")
+abline(v = observed, col = "red", lwd = 2)
+
+
+# Taux d'infection selon la taille du foyer
+
+for (i in seq_along(tailles)) {
+  
+  cat("Taille :", tailles[i], "\n")
+  print(quantile(simulatedB_tailles[, i], c(0.025, 0.5, 0.975)))
+  print(observed_B[i])
+  
+  hist(simulatedB_tailles[, i], breaks = 30,
+       main = paste("PPC Foyer de", tailles[i], "personnes"),
+       xlab = "Taux d'infection simulé")
+  abline(v = observed_B[i], col = "red", lwd = 2)
+}
+
+
+### Sensibilite aux priors
+
+
+# Nouveau prior pour c avec un prior plus large ecart type = 1
+
+model_M1_B_sensi <- "model {
+  a ~ dnorm(0, 1)
+  c ~ dnorm(0, 0.16)
+
+  for (i in 1:N) {
+    logit(p[i]) <- a + c * (size[i] - 2)
+    infected[i] ~ dbern(p[i])
+  }
+}"
+
+model_jagsB_sensi <- jags.model(
+  textConnection(model_M1_B_sensi),
+  data = data_M1_B,
+  n.chains = 3
 )
 
-abline(
-  v = observed,
-  col = "red",
-  lwd = 2
+update(model_jagsB_sensi, 2000)
+
+samplesB_sensi <- coda.samples(
+  model_jagsB_sensi,
+  variable.names = c("a", "c"),
+  n.iter = 10000
 )
 
-mean(simulated2)
-quantile(simulated2, c(0.025, 0.5, 0.975))
+postB_sensi <- as.matrix(samplesB_sensi)
+
+
+gelman.diag(samplesB_sensi)
+effectiveSize(samplesB_sensi)
+
+
+# Comparer les odds ratio a posteriori
+OR_initial <- exp(postB[, "c"])
+OR_sensi <- exp(postB_sensi[, "c"])
+
+
+comparaison_OR <- data.frame(
+  Prior = c("c ~ dnorm(0,4)", "c ~ dnorm(0,0.16)"),
+  OR_median = c(
+    median(OR_initial),
+    median(OR_sensi)
+  ),
+  IC_inf = c(
+    quantile(OR_initial, 0.025),
+    quantile(OR_sensi, 0.025)
+  ),
+  IC_sup = c(
+    quantile(OR_initial, 0.975),
+    quantile(OR_sensi, 0.975)
+  )
+)
+
+print(comparaison_OR, row.names = FALSE)
+
+# Comparer les proba d'infection
+
+pB_sensi <- sapply(tailles, function(taille) {
+  plogis(postB_sensi[, "a"] + postB_sensi[, "c"] * (taille - 2))
+})
+
+comparaison_proba_B <- data.frame(
+  Taille_foyer = tailles,
+  Proba_initiale = round(100 * colMeans(pB), 1),
+  Proba_sensi = round(100 * colMeans(pB_sensi), 1)
+)
+
+print(comparaison_proba_B, row.names = FALSE)
 
 
 
-
-
-
-# DIC
+### DIC
 
 load.module("dic")
 
-# Modele A
-
-dic_M0_A <- dic.samples(
-  model_jags0,
-  n.iter = 10000,
-  type = "pD"
-)
-
-sum(dic_M0_A$deviance) + sum(dic_M0_A$penalty)
-
-
 # Modele B
 
-dic_M0_B <- dic.samples(
-  model_jags1,
+dic_M1_B <- dic.samples(
+  model_jagsB,
   n.iter = 10000,
   type = "pD"
 )
 
-sum(dic_M0_B$deviance) + sum(dic_M0_B$penalty)
+sum(dic_M1_B$deviance) + sum(dic_M1_B$penalty)
+
+
+
+dic_M1_B_sensi <- dic.samples(
+  model_jagsB_sensi,
+  n.iter = 10000,
+  type = "pD"
+)
+
+sum(dic_M1_B_sensi$deviance) + sum(dic_M1_B_sensi$penalty)
