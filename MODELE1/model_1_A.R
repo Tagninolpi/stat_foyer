@@ -266,7 +266,7 @@ abline(v = observed_vaccinated, col = "red", lwd = 2)
 
 model_M1_A_sensi <- "model {
   a ~ dnorm(0, 1)
-  b ~ dnorm(0, 0.16)
+  b ~ dnorm(-1, 1)
 
   for (i in 1:N) {
     logit(p[i]) <- a + b * vaccinated[i]
