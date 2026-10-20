@@ -33,16 +33,12 @@ table(df_model$isolation_status)
 
 # a initial
 plogis(qunif(c(0.025, 0.975), min = 0, max = 10))
-
 # d et e initial
 exp(qunif(c(0.025, 0.975), min = -10, max = 0))
-
 # a sensi
 plogis(qnorm(c(0.025, 0.975), mean = 0, sd = 1))
-
 # d sensi
 exp(qnorm(c(0.025, 0.975), mean = -0.5, sd = 1))
-
 # e sensi
 exp(qnorm(c(0.025, 0.975), mean = -1, sd = 1))
 
@@ -164,6 +160,12 @@ print(tableau_C, row.names = FALSE)
 
 ## Distribution a posteriori des probabilites d'infection
 
+# Taux d'infection obs par isolement
+observed_C <- sapply(isolations, function(isolation) {
+  mean(df_model$infected[df_model$isolation_status == isolation])
+})
+
+
 for (i in seq_along(isolations)) {
   hist(
     pC[, i],
@@ -172,6 +174,8 @@ for (i in seq_along(isolations)) {
     xlab = "Probabilite d'infection",
     col = "lightblue"
   )
+  
+  abline(v = observed_C[i], col = "red", lwd = 2)
 }
 
 
@@ -180,11 +184,6 @@ for (i in seq_along(isolations)) {
 
 # Nombre total d'infectes obs
 observed <- sum(df_model$infected)
-
-# Taux d'infection obs par isolement
-observed_C <- sapply(isolations, function(isolation) {
-  mean(df_model$infected[df_model$isolation_status == isolation])
-})
 
 # Stocker les simulations
 simulatedC <- numeric(1000)
