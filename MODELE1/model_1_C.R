@@ -42,12 +42,14 @@ exp(qnorm(c(0.025, 0.975), mean = -1, sd = 1))
 
 
 model_M1_C <- "model {
-  a ~ dnorm(0, 1)
-  d ~ dnorm(0, 1)
-  e ~ dnorm(-1, 1)
+  a ~ dunif(0, 10)
+  d ~ dunif(-10,0)
+  e ~ dunif(-10, 0)
 
   for (i in 1:N) {
-    logit(p[i]) <- a + d * (isolation[i] == 1) + e * (isolation[i] == 2)
+    logit(p[i]) <- a + 
+                   d * (isolation[i] == 1) + 
+                   e * (isolation[i] == 2)
     infected[i] ~ dbern(p[i])
   }
 }"
@@ -81,6 +83,10 @@ autocorr.plot(samplesC)
 ## Distribution a posteriori des parametres
 
 postC <- as.matrix(samplesC)
+
+quantile(postC[, "a"], c(0.025, 0.5, 0.975))
+quantile(postC[, "d"], c(0.025, 0.5, 0.975))
+quantile(postC[, "e"], c(0.025, 0.5, 0.975))
 
 # OR a posteriori : effet de l'isolement partiel et complet
 quantile(exp(postC[, "d"]), c(0.025, 0.5, 0.975))
@@ -235,8 +241,8 @@ for (i in seq_along(isolations)) {
 
 model_M1_C_sensi <- "model {
   a ~ dnorm(0, 1)
-  d ~ dnorm(0, 0.16)
-  e ~ dnorm(-1, 0.16)
+  d ~ dnorm(-0.5, 1)
+  e ~ dnorm(-1, 1)
 
   for (i in 1:N) {
     logit(p[i]) <- a + d * (isolation[i] == 1) + e * (isolation[i] == 2)
@@ -258,8 +264,12 @@ samplesC_sensi <- coda.samples(
   n.iter = 10000
 )
 
+
 postC_sensi <- as.matrix(samplesC_sensi)
 
+quantile(postC_sensi[, "a"], c(0.025, 0.5, 0.975))
+quantile(postC_sensi[, "d"], c(0.025, 0.5, 0.975))
+quantile(postC_sensi[, "e"], c(0.025, 0.5, 0.975))
 
 gelman.diag(samplesC_sensi)
 effectiveSize(samplesC_sensi)

@@ -55,7 +55,7 @@ exp(qnorm(c(0.025, 0.975), mean = 0, sd = 1))
 
 model_M1_A <- "model {
   a ~ dnorm(0, 1)
-  b ~ dnorm(0, 1)
+  b ~ dunif(-10, 0)
 
   for (i in 1:N) {
     logit(p[i]) <- a + b * vaccinated[i]
@@ -100,6 +100,7 @@ autocorr.plot(samplesA)
 ## Distribution a posteriori des parametres
 
 postA <- as.matrix(samplesA)
+summary(samplesA)
 
 # OR a posteriori : effet de la protection
 quantile(exp(postA[, "b"]), c(0.025, 0.5, 0.975))
@@ -266,7 +267,7 @@ abline(v = observed_vaccinated, col = "red", lwd = 2)
 
 model_M1_A_sensi <- "model {
   a ~ dnorm(0, 1)
-  b ~ dnorm(-1, 1)
+  b ~ dnorm(0, 1)
 
   for (i in 1:N) {
     logit(p[i]) <- a + b * vaccinated[i]
@@ -301,7 +302,7 @@ OR_sensi <- exp(postA_sensi[, "b"])
 
 
 comparaison_OR <- data.frame(
-  Prior = c("b ~ dnorm(0,1)", "b ~ dnorm(0,4)"),
+  Prior = c("b ~ dnorm(0,1)", "b ~ dunif(-10,0)"),
   OR_median = c(
     median(OR_initial),
     median(OR_sensi)
@@ -353,3 +354,6 @@ dic_M1_A_sensi <- dic.samples(
 sum(dic_M1_A_sensi$deviance) + sum(dic_M1_A_sensi$penalty)
 
 
+
+quantile(postA[, "a"], c(0.025, 0.5, 0.975))
+quantile(postA[, "b"], c(0.025, 0.5, 0.975))
