@@ -29,8 +29,14 @@ N
 
 ## Param check
 
+# a
 plogis(qnorm(c(0.025, 0.975), mean = 0, sd = 1))
-exp(qnorm(c(0.025, 0.975), mean = 0, sd = 1))
+
+# c initial
+exp(qnorm(c(0.025, 0.975), mean = 0, sd = 0.5))
+
+# c sensi
+exp(qnorm(c(0.025, 0.975), mean = 0, sd = 2.5))
 
 
 ### Modele 1 B, taille du foyer:
@@ -215,7 +221,8 @@ for (i in seq_along(tailles)) {
 ### Sensibilite aux priors
 
 
-# Nouveau prior pour c avec un prior plus large ecart type = 1
+# Prior alternatif pour c : ecart type = 2.5
+# contre 0.5 dans le modèle initial
 
 model_M1_B_sensi <- "model {
   a ~ dnorm(0, 1)
@@ -273,14 +280,20 @@ print(comparaison_OR, row.names = FALSE)
 
 # Comparer les proba d'infection
 
+# Comparer les proba d'infection
+
 pB_sensi <- sapply(tailles, function(taille) {
   plogis(postB_sensi[, "a"] + postB_sensi[, "c"] * (taille - 2))
 })
 
 comparaison_proba_B <- data.frame(
   Taille_foyer = tailles,
-  Proba_initiale = round(100 * colMeans(pB), 1),
-  Proba_sensi = round(100 * colMeans(pB_sensi), 1)
+  
+  "Proba_initiale (dnorm(0,4))" = round(100 * colMeans(pB), 1),
+  
+  "Proba_sensi (dnorm(0,0.16))" = round(100 * colMeans(pB_sensi), 1),
+  
+  check.names = FALSE
 )
 
 print(comparaison_proba_B, row.names = FALSE)
@@ -310,3 +323,10 @@ dic_M1_B_sensi <- dic.samples(
 )
 
 sum(dic_M1_B_sensi$deviance) + sum(dic_M1_B_sensi$penalty)
+
+
+summary(samplesB)
+print(tableau_B, row.names = FALSE)
+
+par(mfrow=c(1,1))
+

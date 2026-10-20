@@ -31,10 +31,19 @@ table(df_model$isolation_status)
 
 ## Param check
 
-plogis(qnorm(c(0.025, 0.975), mean = 0, sd = 1))
-exp(qnorm(c(0.025, 0.975), mean = 0, sd = 1))
+# a initial
+plogis(qunif(c(0.025, 0.975), min = 0, max = 10))
 
-plogis(qnorm(c(0.025, 0.975), mean = -1, sd = 1))
+# d et e initial
+exp(qunif(c(0.025, 0.975), min = -10, max = 0))
+
+# a sensi
+plogis(qnorm(c(0.025, 0.975), mean = 0, sd = 1))
+
+# d sensi
+exp(qnorm(c(0.025, 0.975), mean = -0.5, sd = 1))
+
+# e sensi
 exp(qnorm(c(0.025, 0.975), mean = -1, sd = 1))
 
 
@@ -237,7 +246,8 @@ for (i in seq_along(isolations)) {
 ### Sensibilite aux priors
 
 
-# Nouveaux priors pour d et e avec des priors plus larges ecart type = 2.5
+# Priors alternatifs pour d et e :
+# lois normales d'ecart type 1 autorisant les deux signes
 
 model_M1_C_sensi <- "model {
   a ~ dnorm(0, 1)
@@ -284,8 +294,8 @@ OR_sensi_e <- exp(postC_sensi[, "e"])
 
 
 comparaison_OR <- data.frame(
-  Prior = c("d ~ dnorm(0,1)", "d ~ dnorm(0,0.16)",
-            "e ~ dnorm(-1,1)", "e ~ dnorm(-1,0.16)"),
+  Prior = c("d ~ dunif(-10,0)", "d ~ dnorm(-0.5, 1)",
+            "e ~ dunif(-10,0)", "e ~ dnorm(-1, 1)"),
   OR_median = c(
     median(OR_initial_d),
     median(OR_sensi_d),
@@ -308,6 +318,7 @@ comparaison_OR <- data.frame(
 
 print(comparaison_OR, row.names = FALSE)
 
+
 # Comparer les proba d'infection
 
 pC_sensi <- sapply(isolations, function(isolation) {
@@ -318,12 +329,16 @@ pC_sensi <- sapply(isolations, function(isolation) {
 
 comparaison_proba_C <- data.frame(
   Statut_isolement = isolations,
-  Proba_initiale = round(100 * colMeans(pC), 1),
-  Proba_sensi = round(100 * colMeans(pC_sensi), 1)
+  
+  "Proba_initiale (d,e ~ dunif(-10,0))" = round(100 * colMeans(pC), 1),
+  
+  "Proba_sensi (d ~ dnorm(-0.5,1) ; e ~ dnorm(-1,1))" =
+    round(100 * colMeans(pC_sensi), 1),
+  
+  check.names = FALSE
 )
 
 print(comparaison_proba_C, row.names = FALSE)
-
 
 
 ### DIC
@@ -349,3 +364,6 @@ dic_M1_C_sensi <- dic.samples(
 )
 
 sum(dic_M1_C_sensi$deviance) + sum(dic_M1_C_sensi$penalty)
+
+
+summary(samplesC)

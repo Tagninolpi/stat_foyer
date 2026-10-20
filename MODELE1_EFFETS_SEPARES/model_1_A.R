@@ -46,7 +46,13 @@ N
 
 ## Param check
 
+# a
 plogis(qnorm(c(0.025, 0.975), mean = 0, sd = 1))
+
+# b initial
+exp(qunif(c(0.025, 0.975), min = -10, max = 0))
+
+# b sensi
 exp(qnorm(c(0.025, 0.975), mean = 0, sd = 1))
 
 
@@ -91,7 +97,7 @@ effectiveSize(samplesA)
 
 plot(samplesA)
 # le graphique est cohérent avec une bonne convergence
-
+lattice::densityplot(samplesA)
 autocorr.plot(samplesA)
 
 
@@ -262,7 +268,8 @@ abline(v = observed_vaccinated, col = "red", lwd = 2)
 ### Sensibilite aux priors
 
 
-# Nouveau prior pour b avec un prior plus large ecart type = 0.5
+# Prior alternatif pour b : loi normale centrée en 0,
+# ecart type = 1, autorisant les effets positifs et négatifs
 
 
 model_M1_A_sensi <- "model {
@@ -290,43 +297,43 @@ samplesA_sensi <- coda.samples(
 )
 
 postA_sensi <- as.matrix(samplesA_sensi)
-
+summary(samplesA_sensi)
 
 gelman.diag(samplesA_sensi)
 effectiveSize(samplesA_sensi)
 
 
-# Comparer les odds ratio a posteriori
-OR_initial <- exp(postA[, "b"])
-OR_sensi <- exp(postA_sensi[, "b"])
 
+# Probabilités a posteriori avec le prior alternatif
 
-comparaison_OR <- data.frame(
-  Prior = c("b ~ dnorm(0,1)", "b ~ dunif(-10,0)"),
-  OR_median = c(
-    median(OR_initial),
-    median(OR_sensi)
-  ),
-  IC_inf = c(
-    quantile(OR_initial, 0.025),
-    quantile(OR_sensi, 0.025)
-  ),
-  IC_sup = c(
-    quantile(OR_initial, 0.975),
-    quantile(OR_sensi, 0.975)
-  )
-)
+pA_non_vaccinated_sensi <- plogis(postA_sensi[, "a"])
 
-print(comparaison_OR, row.names = FALSE)
-
-# Comparer les proba d'infection
-
-p_vaccinated_sensi <- plogis(
+pA_vaccinated_sensi <- plogis(
   postA_sensi[, "a"] + postA_sensi[, "b"]
 )
 
-mean(pA_vaccinated)
-mean(p_vaccinated_sensi)
+
+# Tableau comparatif des probabilités
+
+comparaison_proba_A <- data.frame(
+  Statut_vaccinal = c("Non vacciné", "Vacciné"),
+  
+  "Proba_initiale (dunif(-10,0))" = round(100 * c(
+    mean(pA_non_vaccinated),
+    mean(pA_vaccinated)
+  ), 1),
+  
+  "Proba_sensi (dnorm(0,1))" = round(100 * c(
+    mean(pA_non_vaccinated_sensi),
+    mean(pA_vaccinated_sensi)
+  ), 1),
+  
+  check.names = FALSE
+)
+
+print(comparaison_proba_A, row.names = FALSE)
+
+
 
 
 ### DIC
