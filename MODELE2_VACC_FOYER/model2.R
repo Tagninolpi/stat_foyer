@@ -58,7 +58,7 @@ data_jags <- list(
 modele <- "model {
 
   a ~ dnorm(0,1)
-  b ~ dnorm(0,1)
+  b ~ dunif(-10,0)
   c ~ dnorm(0,4)
 
   for (i in 1:N) {
