@@ -12,5 +12,5 @@ Projet de statistiques bayésiennes (M2) réalisé avec JAGS à partir des donn�
 |---|---|---|---|
 | M0 | `MODELE1_EFFETS_SEPARES/` | Vaccination seule | Ahmad JARKAS |
 | M1 | `MODELE1_EFFETS_SEPARES/` | Taille du foyer seule | Ahmad JARKAS |
-| M2 | `MODELE2_VACC+FOYER/` | Vaccination + taille du foyer | Duzguncan MERAL |
-| M3 | `MODELE3_VACC+FOYER+ISOLEMENT/` | Vaccination + taille du foyer + isolement (modèle final) | Colin PALANDRE |
+| M2 | `MODELE2_VACC_FOYER/` | Vaccination + taille du foyer | Duzguncan MERAL |
+| M3 | `MODELE3_VACC_FOYER_ISOLEMENT/` | Vaccination + taille du foyer + isolement (modèle final) | Colin PALANDRE |
